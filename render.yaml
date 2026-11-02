@@ -4,7 +4,7 @@ services:
     name: cleardue
     runtime: node
     plan: starter
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci && npm run build
     preDeployCommand: npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /api/health
