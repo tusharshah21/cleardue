@@ -36,6 +36,7 @@ const stories: Story[] = [
       currency: "USD",
       timezone: "America/New_York",
       approverEmail: process.env.SEED_AP_EMAIL || "ap@acmelabs.example",
+      mandate: { autopilot: true }, // the agent acts through PayPal with no click (demo 0:25)
     },
     project: {
       name: "Analytics dashboard redesign",
