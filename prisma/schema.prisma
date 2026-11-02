@@ -114,6 +114,7 @@ model Case {
   state        String           @default("open") // open | paused | dispute | resolved
   pausedUntil  DateTime?
   promisedDate DateTime?
+  replayed     Boolean          @default(false) // latest diagnosis came from DEMO_MODE replay
   actions      ProposedAction[]
   timeline     TimelineEvent[]
   createdAt    DateTime         @default(now())
@@ -156,6 +157,8 @@ model PayerQuestion {
   answer    String
   citations Json
   escalated Boolean  @default(false)
+  wantsPlan Boolean  @default(false) // the client asked to pay in parts
+  replayed  Boolean  @default(false) // answer came from DEMO_MODE replay
   createdAt DateTime @default(now())
 }
 

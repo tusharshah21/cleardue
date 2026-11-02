@@ -31,6 +31,11 @@ function fill(content: LanguageModelV4Content[], facts: Record<string, unknown>)
   return JSON.parse(json) as LanguageModelV4Content[];
 }
 
+/** Marks a replayed step, so the UI can label it ("replayed response") instead of passing it off as live. */
+const REPLAYED = { cleardue: { replayed: true } };
+export const wasReplayed = (steps: { providerMetadata?: Record<string, Record<string, unknown>> | undefined }[]) =>
+  steps.some((s) => s.providerMetadata?.cleardue?.replayed === true);
+
 export function findFixture(fixtures: Fixture[], options: LanguageModelV4CallOptions): LanguageModelV4Content[] | null {
   const text = promptText(options);
   const fixture = fixtures.find((f) => text.includes(f.task) && text.includes(f.match));
@@ -51,7 +56,7 @@ export function replayModel(fixtures: Fixture[], fallthrough: LanguageModelV4): 
       const content = findFixture(fixtures, options);
       if (!content) return fallthrough.doGenerate(options);
       const toolCall = content.some((c) => c.type === "tool-call");
-      return { content, finishReason: { unified: toolCall ? "tool-calls" : "stop", raw: undefined }, usage, warnings: [] };
+      return { content, finishReason: { unified: toolCall ? "tool-calls" : "stop", raw: undefined }, usage, warnings: [], providerMetadata: REPLAYED };
     },
     doStream(options) {
       return fallthrough.doStream(options);

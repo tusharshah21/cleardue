@@ -82,7 +82,8 @@ See [.env.example](.env.example). Never commit `.env`.
 | `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
-| `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories (Acme diagnosis and scope check, Brightside plan, Koala's pay-page question); other prompts go to the live model |
+| `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories (Acme diagnosis and scope check, Brightside plan, Koala's pay-page question); other prompts go to the live model. Every replayed answer is labelled "replayed response" in the UI. The hosted demo runs with `false` (live calls) |
+| `PAYPAL_MODE` | `sandbox` (default) or `mock`: an in-process fake PayPal for local development, with a "Simulate client payment" button. Shows a banner, and refuses to run in production |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; session secret needs 32+ chars |
 | `APP_URL` | Public base URL for client pay-page links |
 | `CRON_SECRET` | Protects the polling sync endpoint |

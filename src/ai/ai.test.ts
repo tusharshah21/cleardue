@@ -24,9 +24,16 @@ const good: ClassifyReply = {
 const input = { clientName: "Acme Labs", invoiceSummary: "$2,400 outstanding", thread };
 
 describe("classifyReply", () => {
-  it("returns a validated classification", async () => {
+  it("returns a validated classification, marked live", async () => {
     const r = await classifyReply(new MockLanguageModelV4({ doGenerate: textOf(good) }), input);
-    expect(r).toEqual({ value: good, fallback: false });
+    expect(r).toEqual({ value: good, fallback: false, replayed: false });
+  });
+
+  it("marks a DEMO_MODE replay as replayed", async () => {
+    const live = new MockLanguageModelV4({ doGenerate: textOf(good) });
+    const r = await classifyReply(replayModel(DEMO_FIXTURES, live), input);
+    expect(r.replayed).toBe(true);
+    expect(live.doGenerateCalls).toHaveLength(0);
   });
 
   it("retries once after invalid output, then succeeds", async () => {

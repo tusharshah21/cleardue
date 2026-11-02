@@ -3,11 +3,13 @@
 // can never double-execute an action.
 import { generateText, isStepCount, type LanguageModel, type ToolSet } from "ai";
 import * as prompt from "./prompts/propose-action";
+import { wasReplayed } from "./replay";
 import { AI_TIMEOUT_MS } from "./structured";
 
 export interface ProposeResult {
   rationale: string;
   error?: string;
+  replayed?: boolean;
 }
 
 export async function proposeAction(
@@ -28,7 +30,7 @@ export async function proposeAction(
         abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS),
         maxRetries: 0,
       });
-      return { rationale: result.text.trim() };
+      return { rationale: result.text.trim(), replayed: wasReplayed(result.steps) };
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       if (toolCallsSoFar() > 0) break;

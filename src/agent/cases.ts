@@ -183,7 +183,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
   if (hasReply) onStage("diagnosing");
-  const classification: { value: Diagnosis; fallback: boolean; error?: string } = hasReply
+  const classification: { value: Diagnosis; fallback: boolean; error?: string; replayed?: boolean } = hasReply
     ? await classifyReply(model, {
         clientName: invoice.client.name,
         invoiceSummary: `${formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency)} outstanding, due ${ymd(invoice.dueDate)}, ${daysOverdue(invoice, now)} days overdue`,
@@ -248,6 +248,9 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   } else if (proposal.rationale) {
     await timeline(invoiceId, kase.id, "agent_summary", `Agent's note: ${proposal.rationale}`);
   }
+  const replayed = !!(classification.replayed || ("replayed" in proposal && proposal.replayed));
+  await db.case.update({ where: { id: kase.id }, data: { replayed } });
+  if (replayed) await timeline(invoiceId, kase.id, "replayed", "DEMO_MODE: this diagnosis used recorded AI responses (replayed, not live)");
   return kase.id;
 }
 

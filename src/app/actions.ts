@@ -169,7 +169,7 @@ export async function acceptPlanAction(payToken: string, index: number): Promise
   return {};
 }
 
-export type ScopeState = FormState & { result?: ScopeCheck; request?: string; rate?: string };
+export type ScopeState = FormState & { result?: ScopeCheck; request?: string; rate?: string; replayed?: boolean };
 
 /** Flow B: is this new request covered by the project's scope? */
 export async function scopeCheckAction(projectId: string, _: ScopeState, form: FormData): Promise<ScopeState> {
@@ -178,10 +178,10 @@ export async function scopeCheckAction(projectId: string, _: ScopeState, form: F
   if (!request) return { error: "Describe what the client is asking for." };
   const project = await db.project.findFirst({ where: { id: projectId, client: { freelancerId: freelancer.id } } });
   if (!project) return { error: "Project not found." };
-  const { value } = await scopeCheck(getModel(), { scope: project.scope, request });
+  const { value, replayed } = await scopeCheck(getModel(), { scope: project.scope, request });
   // A rate stated in the scope ("USD 45/hour") pre-fills the line item.
   const rate = /(\d+(?:\.\d{1,2})?)\s*\/\s*h(?:ou)?r/i.exec(project.scope)?.[1];
-  return { result: value, request, rate };
+  return { result: value, request, rate, replayed };
 }
 
 const LineInput = z.object({

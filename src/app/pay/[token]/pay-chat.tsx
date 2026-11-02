@@ -11,6 +11,7 @@ export interface ChatEntry {
   answer: string;
   citations: { source: string; quote: string }[];
   escalated: boolean;
+  replayed: boolean;
 }
 
 const SOURCE_LABEL: Record<string, string> = { scope: "Scope of work", invoice: "Invoice", thread: "Earlier messages" };
@@ -33,7 +34,7 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated }]);
+      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed }]);
       setQuestion("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -60,6 +61,11 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
                 </ul>
               )}
               {e.escalated && <p className="mt-2 text-xs text-muted-foreground">Sent to {freelancerName} to answer personally.</p>}
+              {e.replayed && (
+                <p className="mt-2 text-xs text-amber-700" title="DEMO_MODE served a recorded AI response instead of calling the model">
+                  Replayed response (demo mode)
+                </p>
+              )}
             </div>
           </li>
         ))}
