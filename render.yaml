@@ -28,7 +28,8 @@ services:
       # The hosted demo makes live AI calls; DEMO_MODE replay is for recording the video locally.
       - key: DEMO_MODE
         value: "false"
-      # Mock PayPal refuses to start in production; the hosted demo always uses the sandbox.
+      # The final deploy uses the sandbox. Mock mode is refused in production unless ALLOW_MOCK_IN_PROD=true
+      # (set both in the dashboard for an early deploy check).
       - key: PAYPAL_MODE
         value: "sandbox"
       - key: DEMO_EMAIL

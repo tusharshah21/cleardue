@@ -16,12 +16,13 @@ export class PayPalError extends Error {
   }
 }
 
-/** PAYPAL_MODE: "sandbox" (default) or "mock" (src/paypal/mock.ts). Mock mode refuses to run in production. */
+/** PAYPAL_MODE: "sandbox" (default) or "mock" (src/paypal/mock.ts). Mock mode refuses to run in production unless
+ * ALLOW_MOCK_IN_PROD=true (a deploy check; the mock banner always shows). */
 export function paypalMode(): "sandbox" | "mock" {
   const mode = process.env.PAYPAL_MODE || "sandbox";
   if (mode !== "sandbox" && mode !== "mock") throw new PayPalError(`PAYPAL_MODE must be "sandbox" or "mock", not "${mode}"`, 0);
-  if (mode === "mock" && process.env.NODE_ENV === "production") {
-    throw new PayPalError("PAYPAL_MODE=mock is for local development only and is refused in production. Set PAYPAL_MODE=sandbox.", 0);
+  if (mode === "mock" && process.env.NODE_ENV === "production" && process.env.ALLOW_MOCK_IN_PROD !== "true") {
+    throw new PayPalError("PAYPAL_MODE=mock is for local development only and is refused in production. Set PAYPAL_MODE=sandbox (or ALLOW_MOCK_IN_PROD=true for a deploy check).", 0);
   }
   return mode;
 }

@@ -105,5 +105,9 @@ describe("PayPal mock", () => {
   it("refuses to run in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(() => paypalMode()).toThrow(/refused in production/);
+    vi.stubEnv("ALLOW_MOCK_IN_PROD", "false");
+    expect(() => paypalMode()).toThrow(/refused in production/);
+    vi.stubEnv("ALLOW_MOCK_IN_PROD", "true");
+    expect(paypalMode()).toBe("mock");
   });
 });

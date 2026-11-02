@@ -15,7 +15,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {/* isMockMode() throws in production, so a mock-mode deploy fails loudly on its first render. */}
+        {/* isMockMode() throws in production (unless ALLOW_MOCK_IN_PROD=true), so a mock-mode deploy fails loudly on its first render. */}
         {isMockMode() && (
           <div role="status" className="bg-amber-100 px-4 py-1.5 text-center text-xs font-medium text-amber-900">
             PayPal mock mode: no PayPal calls are made. Invoices and payments are simulated locally.
