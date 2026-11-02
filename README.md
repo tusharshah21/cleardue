@@ -144,7 +144,9 @@ npm run seed                  # demo data
 npm run dev                   # http://localhost:3000
 ```
 
-Sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env`.
+### Demo login
+
+Sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env` (locally `demo@cleardue.app` and whatever password you set). When `DEMO_MODE=true` or `PAYPAL_MODE=mock`, the login page shows these credentials and fills them in, so judges on the hosted demo can sign in with one click. After sign-in, **Start here** walks through the three demo stories (Acme, Brightside, Koala); it can be dismissed and stays in the menu.
 
 ### Mock mode (no PayPal account needed)
 

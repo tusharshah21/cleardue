@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -36,6 +37,14 @@ function errorText(e: unknown): string {
 export async function loginAction(_: FormState, form: FormData): Promise<FormState> {
   const ok = await logIn(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
   if (!ok) return { error: "Wrong email or password." };
+  redirect((await cookies()).get(WELCOME_DISMISSED)?.value ? "/dashboard" : "/welcome");
+}
+
+const WELCOME_DISMISSED = "cleardue_welcome_dismissed";
+
+/** Stop opening Start here after sign-in (it stays in the menu). */
+export async function dismissWelcomeAction() {
+  (await cookies()).set(WELCOME_DISMISSED, "1", { httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 365, path: "/" });
   redirect("/dashboard");
 }
 
