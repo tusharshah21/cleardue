@@ -6,7 +6,7 @@ An AI collections agent for solo Indian freelancers who bill overseas clients th
 
 ## The problem
 
-85% of freelancers have experienced late payment ([Plutio, citing Freelancers Union](https://www.plutio.com/freelancer-magazine/late-invoice-payments)), and 62% of freelance workers surveyed in New York have lost wages to nonpayment ([Authors Guild and Freelancers Union survey](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment)).
+85% of freelancers have experienced late payment ([Plutio, citing Freelancers Union](https://www.plutio.com/freelancer-magazine/late-invoice-payments)), and in a survey of New York freelance workers, 91% "reported experiencing late or overdue wages at least once in their career" ([Authors Guild, Freelancers Union and others](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment)).
 
 Chasing invoices is worse for a solo freelancer in India billing a client in London or Sydney: different time zones, an accounts payable team they've never met, and a payment platform that won't let the client pay in parts. Reminder tools send the same nudge whatever the reason. But "finance hasn't signed off", "cash is tight this month" and "the site breaks on Safari" need three different responses, and the wrong one costs the relationship.
 
@@ -17,7 +17,7 @@ Chasing invoices is worse for a solo freelancer in India billing a client in Lon
 | A. Diagnose and act | A client replies to a reminder. ClearDue classifies the reason with a confidence and verbatim evidence, then proposes PayPal actions (reminder to AP, pause, payment plan, message). The mandate decides whether each runs now, waits for approval, or is refused. |
 | B. Scope check | "Could you also build it in React?" is checked against the statement of work: in scope, gray zone or out of scope, with quoted clauses and a suggested line item that goes onto a PayPal draft. |
 | C. Pay page | A public page per invoice: Pay with PayPal, plan options when they apply, and a chat that answers only from the scope, the invoice and the thread. Anything else goes to the freelancer as a task. |
-| D. Payment plans | A plan the client accepts replaces the invoice with new PayPal invoices, so the client always has something payable. |
+| D. Payment plans | Plan options appear on the pay page for a cash-constraint diagnosis, a request in the chat, or a plan the freelancer approved. When the client accepts, the mandate decides: with autopilot on (or a plan the freelancer already approved) it runs at once; with autopilot off it waits on Approvals and the page says the freelancer will confirm. Running a plan replaces the invoice with new PayPal invoices, so the client always has something payable. |
 | E. Close the loop | A verified PayPal webhook (or polling) marks the invoice paid, resolves the case and closes open tasks. |
 
 ## Architecture
@@ -110,13 +110,16 @@ An overdue invoice with no client reply never reaches the model: code marks it `
 
 ### Evals
 
-[evals/replies.json](evals/replies.json) holds 30 client replies, at least three per reason, including mixed reasons (a dispute outranks cash), relative dates ("Friday", "end of the month") and a prompt injection.
+Two labelled sets, reported separately:
+
+- [evals/synthetic.json](evals/synthetic.json): 30 replies written for the reasons as defined, at least three per reason, including mixed reasons (a dispute outranks cash), relative dates ("Friday", "end of the month") and a prompt injection.
+- [evals/real.json](evals/real.json): anonymized real client replies with their labels. A case can carry its own `today` (the day it was sent) so relative dates resolve correctly.
 
 ```bash
 npm run eval
 ```
 
-It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `ANTHROPIC_API_KEY` and `AI_MODEL`), prints overall and per-reason accuracy plus promised-date resolution, lists the misses, and writes `evals/last-run.json`.
+It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `ANTHROPIC_API_KEY` and `AI_MODEL`). For each set it prints overall and per-reason accuracy plus promised-date resolution and lists the misses, then writes `evals/last-run.json`. `npm run eval -- real` runs one set.
 
 ### Demo mode
 
@@ -139,7 +142,7 @@ Sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env`.
 
 ### Mock mode (no PayPal account needed)
 
-Set `PAYPAL_MODE=mock` to run against an in-process fake of the Invoicing API (state in `.paypal-mock.json`). It behaves like an Indian merchant account (partial payments refused) and shows a "PayPal mock mode" banner. Invoice pages get a **Simulate client payment** button that records the payment and runs the same handler as a verified `INVOICING.INVOICE.PAID` webhook. In mock mode, `npm run seed` seeds through the fake, so every flow, including Brightside's split plan, works end to end. With `NODE_ENV=production`, mock mode throws instead of running.
+Set `PAYPAL_MODE=mock` to run against an in-process fake of the Invoicing API (state in `.paypal-mock.json`). It behaves like an Indian merchant account (partial payments refused) and shows a "PayPal mock mode" banner. Invoice pages get a **Simulate client payment** button that records the payment and runs the same handler as a verified `INVOICING.INVOICE.PAID` webhook. In mock mode, `npm run seed` seeds through the fake, so every flow, including Brightside's split plan, works end to end. With `NODE_ENV=production`, mock mode throws instead of running, unless `ALLOW_MOCK_IN_PROD=true` (for checking a deploy before sandbox credentials are set; the banner still shows). Mock state is a file on the server, so on Render seed from the service's shell (`npm run seed`) rather than your machine, and reseed after each deploy: the disk is not persistent.
 
 ### PayPal sandbox setup
 
@@ -182,7 +185,8 @@ See [.env.example](.env.example). Never commit `.env`.
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Postgres connection string (local Docker or Neon) |
-| `PAYPAL_MODE` | `sandbox` (default) or `mock`: the in-process fake described above. Refused in production |
+| `PAYPAL_MODE` | `sandbox` (default) or `mock`: the in-process fake described above. Refused in production unless `ALLOW_MOCK_IN_PROD=true` |
+| `ALLOW_MOCK_IN_PROD` | `true` lets mock mode run in production for a deploy check, with the banner shown. Leave unset for the real deploy |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox REST app credentials |
 | `PAYPAL_BASE_URL` | Must be `https://api-m.sandbox.paypal.com` |
 | `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
