@@ -107,6 +107,8 @@ model Case {
   invoice      Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   reason       String? // forgot | awaiting_approval | cash_constraint | dispute | ...
   confidence   Float?
+  summary      String?
+  evidence     Json? // verbatim quotes backing the reason
   state        String           @default("open") // open | paused | dispute | resolved
   pausedUntil  DateTime?
   promisedDate DateTime?
@@ -126,7 +128,7 @@ model ProposedAction {
   confidence     Float?
   mandateVerdict String // allow | needs_approval | deny
   mandateReasons Json
-  status         String    @default("pending") // pending | approved | rejected | executed | failed
+  status         String    @default("pending") // pending | auto_executed | executed | rejected | denied | failed
   result         Json?
   createdAt      DateTime  @default(now())
   decidedAt      DateTime?
@@ -153,4 +155,17 @@ model PayerQuestion {
   citations Json
   escalated Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// Every PayPal webhook delivery, for idempotency and audit. Simulator events can't pass signature
+// verification, so they are stored with verified=false and only processed when ALLOW_UNVERIFIED_WEBHOOKS=true.
+model WebhookEvent {
+  id         String   @id // PayPal event id
+  eventType  String
+  resourceId String?
+  verified   Boolean
+  processed  Boolean  @default(false)
+  note       String?
+  payload    Json
+  receivedAt DateTime @default(now())
 }

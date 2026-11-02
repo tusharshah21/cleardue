@@ -25,6 +25,13 @@ export function fromMinor(minor: number, currency: string): string {
   return `${Math.floor(minor / 10 ** d)}.${String(minor % 10 ** d).padStart(d, "0")}`;
 }
 
+/** Splits an amount into n whole minor-unit parts that sum exactly; the first part takes the remainder. */
+export function splitEvenly(totalMinor: number, n: number): number[] {
+  if (!Number.isInteger(totalMinor) || totalMinor < 0 || !Number.isInteger(n) || n < 1) throw new Error("Invalid split");
+  const base = Math.floor(totalMinor / n);
+  return Array.from({ length: n }, (_, i) => (i === 0 ? base + (totalMinor - base * n) : base));
+}
+
 export function formatMoney(minor: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(minor / 10 ** decimals(currency));
 }

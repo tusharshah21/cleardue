@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromMinor, toMinor } from "./money";
+import { fromMinor, splitEvenly, toMinor } from "./money";
 
 describe("money", () => {
   it("round-trips two-decimal currencies", () => {
@@ -16,6 +16,17 @@ describe("money", () => {
     expect(toMinor("1500", "JPY")).toBe(1500);
     expect(fromMinor(1500, "JPY")).toBe("1500");
     expect(() => toMinor("15.5", "JPY")).toThrow();
+  });
+
+  it("splits evenly with exact sums", () => {
+    expect(splitEvenly(180000, 2)).toEqual([90000, 90000]);
+    expect(splitEvenly(100, 3)).toEqual([34, 33, 33]);
+    expect(splitEvenly(1, 2)).toEqual([1, 0]);
+    for (const [t, n] of [[99999, 7], [1, 1], [12345, 12]]) {
+      expect(splitEvenly(t, n).reduce((a, b) => a + b, 0)).toBe(t);
+    }
+    expect(() => splitEvenly(10.5, 2)).toThrow();
+    expect(() => splitEvenly(10, 0)).toThrow();
   });
 
   it("rejects malformed amounts", () => {

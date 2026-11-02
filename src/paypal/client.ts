@@ -16,7 +16,8 @@ export class PayPalError extends Error {
   }
 }
 
-function config() {
+/** Validated sandbox config. Also used before handing credentials to the Agent Toolkit. */
+export function config() {
   const base = process.env.PAYPAL_BASE_URL || `https://${SANDBOX_HOST}`;
   if (new URL(base).hostname !== SANDBOX_HOST) {
     throw new PayPalError(`PAYPAL_BASE_URL must be https://${SANDBOX_HOST}; ClearDue never talks to live PayPal`, 0);
