@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { checkAction, DEFAULT_MANDATE, type Mandate, type MandateContext } from "@/agent/mandate";
 import type { PayPalInvoice } from "@/paypal/invoices";
-import { executePlan, PlanAborted, replacementDrafts, sendPending, strategyFor, suggestPlan, type PlanPayPal, type PlanStore } from "./plans";
+import { executePlan, PlanAborted, planOffers, replacementDrafts, sendPending, strategyFor, suggestPlan, type PlanPayPal, type PlanStore } from "./plans";
 
 const now = new Date("2026-11-02T10:00:00Z");
 const due = new Date("2026-10-28T00:00:00Z");
@@ -66,6 +66,25 @@ describe("suggestPlan", () => {
   it("refuses counts outside the mandate", () => {
     expect(suggestPlan(90000, DEFAULT_MANDATE, due, now, 1)).toBeNull();
     expect(suggestPlan(90000, DEFAULT_MANDATE, due, now, 4)).toBeNull();
+  });
+});
+
+describe("planOffers", () => {
+  const base = { approved: null, reason: null, askedForPlan: false, outstandingMinor: 90000, mandate: { ...DEFAULT_MANDATE, autopilot: true }, originalDue: due, now };
+  const approved = [
+    { amountMinor: 45000, dueDate: now },
+    { amountMinor: 45000, dueDate: new Date("2026-12-01") },
+  ];
+
+  it("offers nothing by default, even with autopilot on", () => {
+    expect(planOffers({ ...base, reason: "awaiting_approval" })).toEqual([]);
+  });
+  it("offers suggestions for a diagnosed cash constraint or a plan request in chat", () => {
+    expect(planOffers({ ...base, reason: "cash_constraint" }).map((p) => p.length)).toEqual([2, 3]);
+    expect(planOffers({ ...base, askedForPlan: true, mandate: DEFAULT_MANDATE }).map((p) => p.length)).toEqual([2, 3]);
+  });
+  it("offers exactly the plan the freelancer approved when there is one", () => {
+    expect(planOffers({ ...base, approved, reason: "cash_constraint" })).toEqual([approved]);
   });
 });
 

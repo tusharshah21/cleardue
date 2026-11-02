@@ -35,6 +35,27 @@ export function suggestPlan(outstandingMinor: number, mandate: Mandate, original
   return amounts.map((amountMinor, i) => ({ amountMinor, dueDate: new Date(start + Math.round((span * i) / (n - 1)) * DAY) }));
 }
 
+/** Which plans the pay page may offer: the plan the freelancer approved, else suggestions inside the mandate, but only
+ * when the client needs one (diagnosed cash_constraint, or they asked for a plan in the pay-page chat). Never by default. */
+export function planOffers(o: {
+  approved: Instalment[] | null;
+  reason: string | null;
+  askedForPlan: boolean;
+  outstandingMinor: number;
+  mandate: Mandate;
+  originalDue: Date;
+  now: Date;
+}): Instalment[][] {
+  if (o.approved) return [o.approved];
+  if (o.reason !== "cash_constraint" && !o.askedForPlan) return [];
+  const plans: Instalment[][] = [];
+  for (let n = 2; n <= o.mandate.maxInstalments; n++) {
+    const plan = suggestPlan(o.outstandingMinor, o.mandate, o.originalDue, o.now, n);
+    if (plan) plans.push(plan);
+  }
+  return plans;
+}
+
 export interface PlanOriginal {
   currency: string;
   invoiceNumber: string | null;

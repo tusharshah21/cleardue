@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +18,7 @@ export interface ChatEntry {
 const SOURCE_LABEL: Record<string, string> = { scope: "Scope of work", invoice: "Invoice", thread: "Earlier messages" };
 
 export function PayChat({ token, history, suggestions, freelancerName }: { token: string; history: ChatEntry[]; suggestions: string[]; freelancerName: string }) {
+  const router = useRouter();
   const [entries, setEntries] = useState(history);
   const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed }]);
       setQuestion("");
+      if (data.plansAvailable) router.refresh(); // show the plan options the request unlocked
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

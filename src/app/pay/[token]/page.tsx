@@ -124,7 +124,7 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
           <CardHeader>
             <CardTitle>Prefer to pay in parts?</CardTitle>
             <CardDescription>
-              {client.freelancer.name} has agreed to these options. Accepting replaces this invoice with{" "}
+              These options are within {client.freelancer.name}&apos;s payment terms. Accepting replaces this invoice with{" "}
               {strategyFor(client.freelancer.country) === "split_invoices" ? "one PayPal invoice per part." : "one PayPal invoice you can pay in parts."}
             </CardDescription>
           </CardHeader>

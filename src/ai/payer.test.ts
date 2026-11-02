@@ -86,6 +86,39 @@ describe("payerAssistant", () => {
   });
 });
 
+describe("figures computed by code", () => {
+  const partlyPaid = { ...koala, paidMinor: 120000 } as typeof koala;
+  const plans = [
+    [
+      { amountMinor: 106668, dueDate: new Date("2026-11-02") },
+      { amountMinor: 106666, dueDate: new Date("2026-12-02") },
+      { amountMinor: 106666, dueDate: new Date("2027-01-01") },
+    ],
+  ];
+
+  it("answers 'how much do I still owe?' with the computed outstanding amount", async () => {
+    const r = await payerAssistant(
+      says({ answer: "You've paid A$1,200.00 so far, so you still owe A$2,000.00.", citations: [{ source: "invoice", quote: "Amount outstanding: AUD 2000.00" }] }),
+      { freelancerName: "Aarav Mehta", sources: payerSources(partlyPaid), question: "how much do I still owe?" },
+    );
+    expect(r.value.escalate).toBe(false);
+    expect(r.value.citations).toHaveLength(1);
+  });
+
+  it("accepts plan option amounts only when those options are offered", async () => {
+    const answer = { answer: "The first payment in option 1 is AUD 1,066.68.", citations: [{ source: "invoice" as const, quote: "Payment plan option 1: AUD 1066.68" }] };
+    const withPlans = await payerAssistant(says(answer), { freelancerName: "Aarav", sources: payerSources(koala, plans), question: "What's the first payment?" });
+    expect(withPlans.value.escalate).toBe(false);
+    const without = await payerAssistant(says(answer), { freelancerName: "Aarav", sources: payerSources(koala), question: "What's the first payment?" });
+    expect(without.value.escalate).toBe(true);
+  });
+
+  it("passes the plan request flag through", async () => {
+    const r = await ask(says({ answer: "I've noted that.", escalate: true, escalationReason: "plan request", wantsPlan: true }), "Can I split this into two payments?");
+    expect(r.value.wantsPlan).toBe(true);
+  });
+});
+
 describe("groundAnswer", () => {
   const ok: PayerAnswer = {
     answer: "It's due on 2026-11-06 and the total is AUD 3200.00.",
@@ -93,6 +126,7 @@ describe("groundAnswer", () => {
     escalate: false,
     escalationReason: null,
     complaint: false,
+    wantsPlan: false,
   };
   it("accepts figures that appear in the sources", () => {
     expect(groundAnswer(ok, sources, "Aarav")).toEqual(ok);

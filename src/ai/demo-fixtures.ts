@@ -15,6 +15,8 @@ const ACME = "waiting on finance sign-off";
 const BRIGHTSIDE = "Cash is tight this month";
 /** The demo's scope-check request for Acme. */
 export const ACME_EXTRA = "Could you also build the dashboard in React?";
+/** A plan request on a pay page (any client). */
+export const KOALA_PLAN = "Can I pay this in two parts?";
 /** The suggested question on Koala's pay page. */
 export const KOALA = "What does 'Responsive QA' cover?";
 
@@ -96,6 +98,20 @@ export const DEMO_FIXTURES: Fixture[] = [
         reasoning: "Building the dashboard in React is front-end development, which the statement of work lists as out of scope. The agreed work ends at design and a Figma handoff.",
         estimatedHours: 32,
         suggestedLineItem: { name: "Front-end build: analytics dashboard (React)", description: "Additional work requested by Acme: building the 8 designed screens in React", hours: 32 },
+      }),
+    ],
+  },
+  {
+    task: PAYER,
+    match: KOALA_PLAN,
+    steps: [
+      text({
+        answer: "I've asked Aarav about paying in parts.",
+        citations: [],
+        escalate: true,
+        escalationReason: "The client asked to pay in parts.",
+        complaint: false,
+        wantsPlan: true,
       }),
     ],
   },

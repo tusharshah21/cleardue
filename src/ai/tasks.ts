@@ -89,17 +89,19 @@ const escalated = (freelancerName: string, why: string): PayerAnswer => ({
   escalate: true,
   escalationReason: why.slice(0, 300),
   complaint: false,
+  wantsPlan: false,
 });
 
 /** Grounding guard: citations must quote their source verbatim, an answer needs at least one surviving citation,
- * and it may not state money or percentage figures that the sources don't contain (no invented discounts). */
+ * and it may not state money or percentage figures that the sources don't contain (no invented discounts).
+ * Figures computed by code (outstanding, paid, plan options) are part of the INVOICE source, so they pass. */
 export function groundAnswer(a: PayerAnswer, sources: PayerSources, freelancerName: string): PayerAnswer {
   const citations = a.citations.filter((c) => norm(sources[c.source]).includes(norm(c.quote).replace(/^["']|["']$/g, "")));
   if (a.escalate) return { ...a, citations };
   const known = new Set((Object.values(sources).join("\n").match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(numberOf));
   const invented = (a.answer.match(FIGURES) ?? []).filter((f) => !known.has(numberOf(f)));
-  if (invented.length) return { ...escalated(freelancerName, `answer stated figures not in the sources: ${invented.join(", ")}`), complaint: a.complaint };
-  if (!citations.length) return { ...escalated(freelancerName, "answer had no verifiable citation"), complaint: a.complaint };
+  if (invented.length) return { ...escalated(freelancerName, `answer stated figures not in the sources: ${invented.join(", ")}`), complaint: a.complaint, wantsPlan: a.wantsPlan };
+  if (!citations.length) return { ...escalated(freelancerName, "answer had no verifiable citation"), complaint: a.complaint, wantsPlan: a.wantsPlan };
   return { ...a, citations };
 }
 

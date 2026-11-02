@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { newPayToken, syncInvoice } from "@/lib/invoicing";
 import * as paypal from "@/paypal/invoices";
 import type { LineItem } from "@/paypal/invoices";
-import { executePlan, replacementDrafts, sendPending, strategyFor, suggestPlan, type PlanStore } from "./plans";
+import { executePlan, planOffers, replacementDrafts, sendPending, strategyFor, type PlanStore } from "./plans";
 
 type PlanInvoice = Invoice & { client: Client & { freelancer: Freelancer } };
 
@@ -25,23 +25,25 @@ function mandateContext(invoice: PlanInvoice, caseState: string, now: Date): Man
   };
 }
 
-/** Plans the client can accept: the one the freelancer approved for this invoice if any, otherwise (autopilot
- * only) deterministic plans inside the mandate. Everything is recomputed server-side; the browser only sends an index. */
+/** Plans the client can accept (rules in planOffers). Everything is recomputed server-side; the browser only sends
+ * an index, and every plan must pass the mandate's hard limits. */
 export async function planOptions(invoice: PlanInvoice, now = new Date()): Promise<Instalment[][]> {
-  const kase = await db.case.findUnique({ where: { invoiceId: invoice.id }, include: { actions: { where: { type: "offer_payment_plan", status: { in: ["executed", "auto_executed"] } }, orderBy: { decidedAt: "desc" }, take: 1 } } });
+  const [kase, asked] = await Promise.all([
+    db.case.findUnique({ where: { invoiceId: invoice.id }, include: { actions: { where: { type: "offer_payment_plan", status: { in: ["executed", "auto_executed"] } }, orderBy: { decidedAt: "desc" }, take: 1 } } }),
+    db.payerQuestion.count({ where: { invoiceId: invoice.id, wantsPlan: true } }),
+  ]);
   const ctx = mandateContext(invoice, kase?.state ?? "open", now);
   const offered = kase?.actions[0];
-  const candidates: Instalment[][] = [];
-  if (offered) {
-    const action = toAction("offer_payment_plan", offered.params as Record<string, unknown>, { mandate: ctx, currency: invoice.currency, approverEmail: null });
-    if (action.type === "offer_plan") candidates.push(action.instalments);
-  } else if (ctx.mandate.autopilot) {
-    for (let n = 2; n <= ctx.mandate.maxInstalments; n++) {
-      const plan = suggestPlan(invoice.totalMinor - invoice.paidMinor, ctx.mandate, invoice.dueDate, now, n);
-      if (plan) candidates.push(plan);
-    }
-  }
-  // The client choosing a plan the freelancer offered is the approval; only hard mandate limits apply here.
+  const action = offered && toAction("offer_payment_plan", offered.params as Record<string, unknown>, { mandate: ctx, currency: invoice.currency, approverEmail: null });
+  const candidates = planOffers({
+    approved: action?.type === "offer_plan" ? action.instalments : null,
+    reason: kase?.reason ?? null,
+    askedForPlan: asked > 0,
+    outstandingMinor: invoice.totalMinor - invoice.paidMinor,
+    mandate: ctx.mandate,
+    originalDue: invoice.dueDate,
+    now,
+  });
   return candidates.filter((instalments) => checkAction({ type: "offer_plan", instalments }, ctx).verdict !== "deny");
 }
 

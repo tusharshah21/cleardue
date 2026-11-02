@@ -38,6 +38,7 @@ export const PayerAnswerSchema = z.object({
   escalate: z.boolean().describe("True when the sources don't answer the question or the payer asks for something only the freelancer can decide"),
   escalationReason: z.string().max(300).nullable(),
   complaint: z.boolean().describe("True when the payer disputes the work, the amount or the quality"),
+  wantsPlan: z.boolean().default(false).describe("True when the payer asks to pay in parts, in instalments, or to split the invoice"),
 });
 export type PayerAnswer = z.infer<typeof PayerAnswerSchema>;
 
