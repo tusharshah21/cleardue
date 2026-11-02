@@ -20,6 +20,7 @@ export interface CreateInvoiceInput {
   recipientName: string;
   items: LineItem[];
   dueDate: Date;
+  invoiceDate?: Date;
   note?: string;
   term?: string;
   allowTip?: boolean;
@@ -53,7 +54,7 @@ export function buildInvoiceBody(input: CreateInvoiceInput) {
   return {
     detail: {
       currency_code: currency,
-      invoice_date: isoDate(new Date()),
+      invoice_date: isoDate(input.invoiceDate ?? new Date()),
       payment_term: { term_type: "DUE_ON_DATE_SPECIFIED", due_date: isoDate(input.dueDate) },
       ...(input.note && { note: input.note }),
       ...(input.term && { term: input.term }),

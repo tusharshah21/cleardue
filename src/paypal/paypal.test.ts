@@ -55,7 +55,7 @@ describe("PayPal client", () => {
         422,
       ),
     );
-    const err = await paypalRequest("/v2/invoicing/invoices", { method: "POST", body: {} }).catch((e) => e);
+    const err = (await paypalRequest("/v2/invoicing/invoices", { method: "POST", body: {} }).catch((e) => e)) as PayPalError;
     expect(err).toBeInstanceOf(PayPalError);
     expect(err.status).toBe(422);
     expect(err.debugId).toBe("abc123");

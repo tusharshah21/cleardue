@@ -22,7 +22,7 @@ const ap = process.env.SPIKE_AP_EMAIL;
 if (!payer || !ap) throw new Error("Set SPIKE_PAYER_EMAIL (sandbox personal account) and SPIKE_AP_EMAIL in .env");
 
 const results: Record<string, unknown> = { ranAt: new Date().toISOString() };
-const step = async <T>(name: string, fn: () => Promise<T>): Promise<T | undefined> => {
+const step = async <T,>(name: string, fn: () => Promise<T>): Promise<T | undefined> => {
   try {
     const out = await fn();
     results[name] = { ok: true, out };
