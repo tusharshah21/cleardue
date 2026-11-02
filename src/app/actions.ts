@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { analyzeInvoice, approveProposal, rejectProposal } from "@/agent/cases";
+import { MandateSchema } from "@/agent/mandate";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getModel } from "@/ai/provider";
@@ -247,6 +248,32 @@ export async function sendDraftAction(invoiceId: string): Promise<FormState> {
   }
   revalidatePath(`/invoices/${invoiceId}`);
   return {};
+}
+
+/** Per-client mandate. Stored as a full override so the client's limits don't shift when the default changes. */
+export async function saveMandateAction(clientId: string, _: FormState & { saved?: boolean }, form: FormData): Promise<FormState & { saved?: boolean }> {
+  const freelancer = await requireFreelancer();
+  const client = await db.client.findFirst({ where: { id: clientId, freelancerId: freelancer.id } });
+  if (!client) return { error: "Client not found." };
+  try {
+    const value = String(form.get("minFirstValue") ?? "").trim();
+    const mandate = MandateSchema.parse({
+      autopilot: form.get("autopilot") === "on",
+      neverAutoContact: form.get("neverAutoContact") === "on",
+      minConfidence: Number(form.get("minConfidence")),
+      toneCeiling: form.get("toneCeiling"),
+      maxInstalments: Number(form.get("maxInstalments")),
+      minFirstPayment:
+        form.get("minFirstKind") === "amount" ? { kind: "amount", valueMinor: toMinor(value, client.currency) } : { kind: "percent", value: Number(value) },
+      maxPlanDays: Number(form.get("maxPlanDays")),
+      quietHours: { start: Number(form.get("quietStart")), end: Number(form.get("quietEnd")) },
+    });
+    await db.client.update({ where: { id: client.id }, data: { mandate } });
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath("/clients");
+  return { saved: true };
 }
 
 export async function completeTaskAction(taskId: string): Promise<FormState> {

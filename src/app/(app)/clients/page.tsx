@@ -1,6 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { effectiveMandate } from "@/agent/mandate";
+import { MandateForm } from "./mandate-form";
 import { NewClientForm } from "./new-client-form";
 
 export default async function ClientsPage() {
@@ -32,6 +34,14 @@ export default async function ClientsPage() {
                   <pre className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground">{p.scope}</pre>
                 </details>
               ))}
+              <details className="rounded-md border p-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Mandate: {effectiveMandate(freelancer.mandate, c.mandate).autopilot ? "autopilot on" : "approve everything"}
+                </summary>
+                <div className="mt-3">
+                  <MandateForm clientId={c.id} currency={c.currency} mandate={effectiveMandate(freelancer.mandate, c.mandate)} />
+                </div>
+              </details>
             </CardContent>
           </Card>
         ))}

@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { after } from "next/server";
-import { StatusBadge } from "@/components/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncStale } from "@/lib/invoicing";
 import { formatMoney } from "@/lib/money";
-import { daysOverdue, isOpen, sumByCurrency } from "@/lib/receivables";
+import { describeProposal, REASON_LABELS } from "@/lib/proposals";
+import { daysOverdue, isOpen, outstanding, sumByCurrency } from "@/lib/receivables";
 import { retryPendingPlans } from "@/plans/accept";
+import { ReceivablesGrid, type ReceivableRow } from "./receivables-grid";
 
 export default async function DashboardPage() {
   const freelancer = await requireFreelancer();
@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   );
   const invoices = await db.invoice.findMany({
     where: { client: { freelancerId: freelancer.id } },
-    include: { client: true },
+    include: { client: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } }, tasks: { where: { done: false }, take: 1 } },
     orderBy: { dueDate: "asc" },
   });
   const now = new Date();
@@ -29,6 +29,39 @@ export default async function DashboardPage() {
   const open = invoices.filter(isOpen);
   const overdue = open.filter((i) => daysOverdue(i, now) > 0);
   const dueThisWeek = open.filter((i) => i.dueDate >= now && i.dueDate <= weekAhead);
+
+  const rows: ReceivableRow[] = invoices.map((i) => {
+    const pending = i.case?.actions[0];
+    const overdue = daysOverdue(i, now);
+    const nextAction = i.tasks.length
+      ? "Reply to the client's pay-page message"
+      : pending
+        ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}`
+        : i.status === "DRAFT"
+          ? "Send the draft"
+          : !isOpen(i)
+            ? ""
+            : i.case?.state === "dispute"
+              ? "Resolve the dispute yourself"
+              : i.case?.state === "paused"
+                ? `Paused until ${i.case.pausedUntil?.toISOString().slice(0, 10) ?? "later"}`
+                : overdue > 0
+                  ? "Diagnose"
+                  : "Wait for the due date";
+    const owed = i.status === "DRAFT" ? i.totalMinor : outstanding(i);
+    return {
+      id: i.id,
+      client: i.client.name,
+      invoice: i.invoiceNumber ?? (i.status === "DRAFT" ? "Draft" : "Local only"),
+      status: overdue > 0 ? "OVERDUE" : i.status,
+      dueDate: i.dueDate.toISOString().slice(0, 10),
+      daysOverdue: overdue,
+      outstanding: owed,
+      outstandingText: formatMoney(owed, i.currency),
+      reason: i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "",
+      nextAction,
+    };
+  });
 
   const stats = [
     { label: "Total owed", value: sumByCurrency(open), hint: `${open.length} open invoices` },
@@ -67,34 +100,7 @@ export default async function DashboardPage() {
               No invoices yet. <Link href="/clients" className="underline">Add a client</Link>, then create one.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell>
-                      <Link href={`/invoices/${i.id}`} className="font-medium hover:underline">
-                        {i.client.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{i.invoiceNumber ?? "Local only"}</TableCell>
-                    <TableCell>{i.dueDate.toISOString().slice(0, 10)}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={i.status} overdueDays={daysOverdue(i, now)} />
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(i.totalMinor, i.currency)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ReceivablesGrid rows={rows} />
           )}
         </CardContent>
       </Card>

@@ -23,6 +23,8 @@
     "@paypal/agent-toolkit": "^1.11.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "ag-grid-community": "36.2.0",
+    "ag-grid-react": "36.2.0",
     "ai": "^7.0.159",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
