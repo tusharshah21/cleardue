@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { Client, Freelancer, Invoice } from "@/generated/prisma/client";
 import { toMinor } from "@/lib/money";
 import { createDraftInvoice, getInvoice, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
+import { INVOICE_EVENTS, invoiceIdOf, type WebhookEventBody } from "@/paypal/webhooks";
 import { db } from "./db";
 
 export const newPayToken = () => randomBytes(24).toString("base64url");
@@ -130,6 +131,7 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
   const fresh = await getInvoice(invoice.paypalInvoiceId);
   const updated = await db.invoice.update({ where: { id: invoice.id }, data: statusFields(fresh, invoice.currency) });
   if (updated.status === invoice.status) return updated;
+  if (CLOSED.includes(updated.status)) await db.task.updateMany({ where: { invoiceId: invoice.id, done: false }, data: { done: true } });
   const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
   await db.timelineEvent.create({
     data: { invoiceId: invoice.id, caseId: kase?.id, kind: "status_changed", summary: `PayPal status ${invoice.status} → ${updated.status} (${source})` },
@@ -142,6 +144,32 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
     });
   }
   return updated;
+}
+
+/** Stores a webhook event and, if it may be processed, syncs the invoice it names. Shared by the webhook route and the
+ * mock-mode "Simulate client payment" button. Idempotent by event id; returns false if the sync failed (left unprocessed). */
+export async function handleWebhookEvent(event: WebhookEventBody, opts: { verified: boolean; process: boolean; note: string | null; source: string }) {
+  const payload = JSON.parse(JSON.stringify(event));
+  await db.webhookEvent.upsert({
+    where: { id: event.id },
+    create: { id: event.id, eventType: event.event_type, resourceId: invoiceIdOf(event), verified: opts.verified, note: opts.note, payload },
+    update: { verified: opts.verified, note: opts.note },
+  });
+  if (!opts.process) return false;
+  if (INVOICE_EVENTS.includes(event.event_type)) {
+    const paypalId = invoiceIdOf(event);
+    const invoice = paypalId ? await db.invoice.findUnique({ where: { paypalInvoiceId: paypalId } }) : null;
+    if (invoice) {
+      try {
+        await syncInvoice(invoice, `${opts.source} ${event.event_type}`);
+      } catch (e) {
+        console.error("webhook sync failed", e);
+        return false;
+      }
+    }
+  }
+  await db.webhookEvent.update({ where: { id: event.id }, data: { processed: true } });
+  return true;
 }
 
 /** Polling fallback for unreliable webhooks: re-reads open invoices not synced recently, and ends expired pauses. */

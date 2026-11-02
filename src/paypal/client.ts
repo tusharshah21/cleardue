@@ -16,8 +16,21 @@ export class PayPalError extends Error {
   }
 }
 
+/** PAYPAL_MODE: "sandbox" (default) or "mock" (src/paypal/mock.ts). Mock mode refuses to run in production. */
+export function paypalMode(): "sandbox" | "mock" {
+  const mode = process.env.PAYPAL_MODE || "sandbox";
+  if (mode !== "sandbox" && mode !== "mock") throw new PayPalError(`PAYPAL_MODE must be "sandbox" or "mock", not "${mode}"`, 0);
+  if (mode === "mock" && process.env.NODE_ENV === "production") {
+    throw new PayPalError("PAYPAL_MODE=mock is for local development only and is refused in production. Set PAYPAL_MODE=sandbox.", 0);
+  }
+  return mode;
+}
+
+export const isMockMode = () => paypalMode() === "mock";
+
 /** Validated sandbox config. Also used before handing credentials to the Agent Toolkit. */
 export function config() {
+  if (isMockMode()) return { base: "mock", id: "mock", secret: "mock" };
   const base = process.env.PAYPAL_BASE_URL || `https://${SANDBOX_HOST}`;
   if (new URL(base).hostname !== SANDBOX_HOST) {
     throw new PayPalError(`PAYPAL_BASE_URL must be https://${SANDBOX_HOST}; ClearDue never talks to live PayPal`, 0);
@@ -90,6 +103,12 @@ export interface RequestOptions {
 }
 
 export async function paypalRequest<T>(path: string, opts: RequestOptions = {}, retried = false): Promise<T> {
+  if (isMockMode()) {
+    const { mockRequest } = await import("./mock");
+    const res = mockRequest(opts.method ?? "GET", path, opts.body);
+    if (res.status >= 400) throw await toError(new Response(JSON.stringify(res.body), { status: res.status }));
+    return res.body as T;
+  }
   const { base } = config();
   const res = await timedFetch(`${base}${path}`, {
     method: opts.method ?? "GET",

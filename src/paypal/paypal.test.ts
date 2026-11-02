@@ -11,6 +11,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   resetTokenCache();
+  vi.stubEnv("PAYPAL_MODE", "sandbox");
   vi.stubEnv("PAYPAL_CLIENT_ID", "id");
   vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
   vi.stubEnv("PAYPAL_BASE_URL", "https://api-m.sandbox.paypal.com");

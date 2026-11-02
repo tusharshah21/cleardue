@@ -12,6 +12,8 @@ import { daysOverdue, isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
 import { ACME_EXTRA } from "@/ai/demo-fixtures";
 import { isDemoMode } from "@/ai/provider";
+import { SimulatePaymentButton } from "@/components/simulate-payment-button";
+import { isMockMode } from "@/paypal/client";
 import { AnalyzeButton, ReplyForm } from "./case-controls";
 import { ScopeCheck, SendDraftButton } from "./scope-check";
 import { SyncButton } from "./sync-button";
@@ -48,6 +50,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
         <div className="flex items-center gap-3">
           <StatusBadge status={invoice.status} overdueDays={daysOverdue(invoice)} />
           {invoice.status === "DRAFT" ? <SendDraftButton invoiceId={invoice.id} /> : invoice.paypalInvoiceId && <SyncButton invoiceId={invoice.id} />}
+          {isMockMode() && open && invoice.paypalInvoiceId && <SimulatePaymentButton paypalInvoiceId={invoice.paypalInvoiceId} />}
         </div>
       </div>
 

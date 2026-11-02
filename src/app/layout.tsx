@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { isMockMode } from "@/paypal/client";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-sans", subsets: ["latin"] });
@@ -13,7 +14,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        {/* isMockMode() throws in production, so a mock-mode deploy fails loudly on its first render. */}
+        {isMockMode() && (
+          <div role="status" className="bg-amber-100 px-4 py-1.5 text-center text-xs font-medium text-amber-900">
+            PayPal mock mode: no PayPal calls are made. Invoices and payments are simulated locally.
+          </div>
+        )}
+        {children}
+      </body>
     </html>
   );
 }

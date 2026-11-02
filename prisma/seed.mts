@@ -5,9 +5,12 @@ import "dotenv/config";
 import { DEFAULT_MANDATE } from "../src/agent/mandate";
 import { db } from "../src/lib/db";
 import { createAndSendInvoice, lineTotal, newPayToken } from "../src/lib/invoicing";
+import { isMockMode } from "../src/paypal/client";
 import type { LineItem } from "../src/paypal/invoices";
+import { resetMock } from "../src/paypal/mock";
 
-const withPayPal = process.argv.includes("--paypal");
+// In PAYPAL_MODE=mock the seed always goes through (mock) PayPal, so every flow works locally.
+const withPayPal = process.argv.includes("--paypal") || isMockMode();
 const day = 86_400_000;
 const daysFromNow = (n: number) => new Date(Date.now() + n * day);
 const clientEmail = (slug: string) => process.env.SEED_CLIENT_EMAIL || `${slug}@example.com`;
@@ -110,6 +113,7 @@ const stories: Story[] = [
 async function main() {
   // Fresh start: everything hangs off the freelancer and cascades.
   await db.freelancer.deleteMany({});
+  if (isMockMode()) resetMock();
   const freelancer = await db.freelancer.create({
     data: {
       email: demoEmail,

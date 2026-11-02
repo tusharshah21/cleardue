@@ -134,6 +134,11 @@ export function cancelInvoice(id: string, opts: { sendToRecipient: boolean; note
   });
 }
 
+/** Records a payment against an invoice. In sandbox mode the agent reaches this through the Agent Toolkit instead. */
+export function recordPayment(id: string, payment: { amount: { currency_code: string; value: string }; method: string; payment_date: string; note?: string }) {
+  return paypalRequest<{ payment_id: string }>(`${BASE}/${encodeURIComponent(id)}/payments`, { method: "POST", body: payment });
+}
+
 export function deleteDraftInvoice(id: string) {
   return paypalRequest<void>(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

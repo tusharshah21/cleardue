@@ -4,7 +4,9 @@
 import { PayPalAgentToolkit } from "@paypal/agent-toolkit/ai-sdk";
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { config, PayPalError } from "@/paypal/client";
+import "server-only";
+import { config, isMockMode, PayPalError } from "@/paypal/client";
+import * as invoices from "@/paypal/invoices";
 
 export const TOOLKIT_TOOLS = ["get_invoice", "send_invoice_reminder", "cancel_sent_invoice", "record_payment_for_invoice"] as const;
 export type ToolkitToolName = (typeof TOOLKIT_TOOLS)[number];
@@ -53,6 +55,7 @@ export function toolkitTools(): Record<ToolkitToolName, ToolkitTool> {
         },
         run: async (args) => {
           config(); // sandbox host + credentials, or a readable error
+          if (isMockMode()) return runMock(name, args);
           return parseToolkitResult(name, await t.execute(args, { toolCallId: "cleardue", messages: [] }));
         },
       };
@@ -61,6 +64,29 @@ export function toolkitTools(): Record<ToolkitToolName, ToolkitTool> {
   ) as Record<ToolkitToolName, ToolkitTool>;
   cached = { key, tools };
   return tools;
+}
+
+/** PAYPAL_MODE=mock: the same four calls, sent through src/paypal so they hit the in-process mock. */
+async function runMock(name: ToolkitToolName, args: Record<string, unknown>): Promise<unknown> {
+  const id = String(args.invoice_id ?? "");
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  switch (name) {
+    case "get_invoice":
+      return invoices.getInvoice(id);
+    case "send_invoice_reminder":
+      await invoices.remindInvoice(id, { subject: str(args.subject), note: str(args.note), additionalRecipients: args.additional_recipients as string[] | undefined });
+      return { ok: true };
+    case "cancel_sent_invoice":
+      await invoices.cancelInvoice(id, { sendToRecipient: args.send_to_recipient === true, note: str(args.note) });
+      return { ok: true };
+    case "record_payment_for_invoice":
+      return invoices.recordPayment(id, {
+        amount: args.amount as { currency_code: string; value: string },
+        method: str(args.method) ?? "OTHER",
+        payment_date: str(args.payment_date) ?? new Date().toISOString().slice(0, 10),
+        note: str(args.note),
+      });
+  }
 }
 
 /** The toolkit returns JSON strings and reports failures as `{ error }` instead of throwing. Make failures throw. */

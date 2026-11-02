@@ -10,7 +10,11 @@ import { db } from "@/lib/db";
 import { getModel } from "@/ai/provider";
 import type { ScopeCheck } from "@/ai/schemas";
 import { scopeCheck } from "@/ai/tasks";
-import { addLineToDraft, createAndSendInvoice, sendDraft, syncInvoice } from "@/lib/invoicing";
+import { randomUUID } from "node:crypto";
+import { addLineToDraft, createAndSendInvoice, handleWebhookEvent, sendDraft, syncInvoice } from "@/lib/invoicing";
+import { isMockMode } from "@/paypal/client";
+import { recordPayment } from "@/paypal/invoices";
+import { mockInvoice } from "@/paypal/mock";
 import { toMinor } from "@/lib/money";
 import { acceptPlan } from "@/plans/accept";
 
@@ -274,6 +278,25 @@ export async function saveMandateAction(clientId: string, _: FormState & { saved
   }
   revalidatePath("/clients");
   return { saved: true };
+}
+
+/** PAYPAL_MODE=mock only: the client pays in full on the mock PayPal page, then the same handler as a verified
+ * INVOICING.INVOICE.PAID webhook runs. Public like the pay page; refused outside mock mode. */
+export async function simulatePaymentAction(paypalInvoiceId: string): Promise<FormState> {
+  try {
+    if (!isMockMode()) return { error: "Only available in PayPal mock mode." };
+    const inv = mockInvoice(paypalInvoiceId);
+    if (!inv) return { error: "Invoice not found in the PayPal mock." };
+    if (Number(inv.due_amount.value) <= 0) return { error: `Nothing due: invoice is ${inv.status}.` };
+    await recordPayment(paypalInvoiceId, { amount: inv.due_amount, method: "PAYPAL", payment_date: new Date().toISOString().slice(0, 10) });
+    const event = { id: `WH-MOCK-${randomUUID()}`, event_type: "INVOICING.INVOICE.PAID", resource: { invoice: { id: paypalInvoiceId } } };
+    const ok = await handleWebhookEvent(event, { verified: true, process: true, note: "simulated client payment (PayPal mock mode)", source: "simulated webhook" });
+    if (!ok) return { error: "Payment recorded, but syncing the invoice failed. Polling will retry." };
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath("/", "layout");
+  return {};
 }
 
 export async function completeTaskAction(taskId: string): Promise<FormState> {
