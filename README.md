@@ -86,6 +86,8 @@ All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other
 
 `@paypal/agent-toolkit` supplies four of the agent's tools: `get_invoice`, `send_invoice_reminder`, `cancel_sent_invoice` and `record_payment_for_invoice`. The toolkit ships AI SDK v4 tools with zod v3 schemas, so [src/agent/toolkit.ts](src/agent/toolkit.ts) lifts each tool's description, JSON schema and `execute`, and never hands `execute` to the model. The model sees the toolkit's schema, but calling the tool runs the mandate gate first; only an `allow` reaches the toolkit. The adapter imports `server-only`, and the client bundle contains no toolkit or zod v3 code. ClearDue's own tools (`send_message`, `pause_reminders`, `offer_payment_plan`) go through the same gate.
 
+The toolkit's source and README are at [github.com/paypal/agent-toolkit](https://github.com/paypal/agent-toolkit), and its tool reference is at [docs.paypal.ai/developer/tools/ai/agent-tools-ref](https://docs.paypal.ai/developer/tools/ai/agent-tools-ref) (also mirrored at [paypal.gitbook.com](https://paypal.gitbook.com/agent-toolkit-and-mcp-server/agent-toolkit)). [github.com/paypal/AI-Toolkit](https://github.com/paypal/AI-Toolkit) is a different product: a plugin for coding agents (Claude Code, Codex, Cursor) that adds PayPal skills and the sandbox MCP server to the development workflow, not a runtime library.
+
 ### The India constraint
 
 PayPal doesn't allow partial payments on invoices from merchants in India, Brazil or Israel. ClearDue picks a plan strategy from the freelancer's country, behind one pipeline ([src/plans](src/plans)):
@@ -94,6 +96,10 @@ PayPal doesn't allow partial payments on invoices from merchants in India, Brazi
 - `partial_payment` (everyone else): one replacement invoice that accepts part payments, with the first instalment as the minimum.
 
 Either way the client always has something payable: the new drafts are created first, the original is re-read and only cancelled if it is still unpaid (silently), then the drafts are sent. If a send fails after the cancel, the plan stays `pending_send` and polling retries it. Amounts are integer minor units everywhere, and plans always sum exactly.
+
+### Why not PayPal Pay Later?
+
+Pay Later lets the payer spread the cost while the merchant is paid in full, which would suit a short-on-cash client. But PayPal offers it only to merchants based in a few countries: the [US eligibility rules](https://developer.paypal.com/docs/checkout/pay-later/us/) require a US-based merchant, and the other supported merchant countries are the UK, Australia, Canada, France, Germany, Italy and Spain. India isn't one of them, so it can't serve ClearDue's freelancers. Split invoices work for a merchant in any country. Pay Later is a possible future option for freelancers based in those countries.
 
 ## AI usage
 
