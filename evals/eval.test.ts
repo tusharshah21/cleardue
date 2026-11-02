@@ -1,15 +1,26 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { REASONS } from "@/ai/schemas";
-import { score, type EvalCase } from "./score";
+import { EVAL_SETS, score, type EvalCase } from "./score";
 
-const { cases } = JSON.parse(readFileSync(new URL("./replies.json", import.meta.url), "utf8")) as { cases: EvalCase[] };
+const load = (set: string) => JSON.parse(readFileSync(new URL(`./${set}.json`, import.meta.url), "utf8")) as { today: string; cases: EvalCase[] };
 
-describe("eval set", () => {
-  it("has 25 to 30 unique cases covering every classifiable reason at least 3 times", () => {
+describe("eval sets", () => {
+  it.each(EVAL_SETS)("%s: unique ids, known reasons, ISO dates", (set) => {
+    const { today, cases } = load(set);
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(cases.length);
+    for (const c of cases) {
+      expect(REASONS, c.id).toContain(c.expected);
+      expect(c.messages.length, c.id).toBeGreaterThan(0);
+      if (c.promisedDate) expect(c.promisedDate, c.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("synthetic has 25 to 30 cases covering every reason at least 3 times", () => {
+    const { cases } = load("synthetic");
     expect(cases.length).toBeGreaterThanOrEqual(25);
     expect(cases.length).toBeLessThanOrEqual(30);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(cases.length);
     for (const reason of REASONS) expect(cases.filter((c) => c.expected === reason).length, reason).toBeGreaterThanOrEqual(3);
   });
 });

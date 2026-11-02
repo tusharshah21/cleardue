@@ -1,9 +1,14 @@
 // Scoring for the reply-classification eval (npm run eval). Pure, so it is unit-tested.
 import { REASONS, type Reason } from "../src/ai/schemas";
 
+/** evals/<set>.json. synthetic: written for the reasons as defined; real: anonymized client replies. */
+export const EVAL_SETS = ["synthetic", "real"] as const;
+
 export interface EvalCase {
   id: string;
   messages: string[];
+  /** The day the reply was sent (YYYY-MM-DD), for resolving relative dates; defaults to the set's today. */
+  today?: string;
   expected: Reason;
   promisedDate?: string;
   approverEmail?: string;
