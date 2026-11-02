@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { analyzeInvoice, approveProposal, rejectProposal } from "@/agent/cases";
+import { approveProposal, rejectProposal } from "@/agent/cases";
 import { MandateSchema } from "@/agent/mandate";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -137,35 +137,6 @@ export async function syncInvoiceAction(invoiceId: string): Promise<FormState> {
     await syncInvoice(invoice);
   } catch (e) {
     return { error: `Sync failed. ${errorText(e)}` };
-  }
-  revalidatePath(`/invoices/${invoiceId}`);
-  return {};
-}
-
-const ReplyInput = z.object({ body: z.string().trim().min(1, "paste the client's message").max(5000) });
-
-/** Flow C entry: paste a client reply, then diagnose and propose actions. */
-export async function addReplyAction(invoiceId: string, _: FormState, form: FormData): Promise<FormState> {
-  const freelancer = await requireFreelancer();
-  try {
-    const { body } = ReplyInput.parse({ body: form.get("body") });
-    const invoice = await db.invoice.findFirst({ where: { id: invoiceId, client: { freelancerId: freelancer.id } } });
-    if (!invoice) return { error: "Invoice not found." };
-    await db.message.create({ data: { clientId: invoice.clientId, invoiceId, direction: "INBOUND", channel: "paste", body } });
-    await analyzeInvoice(invoiceId, freelancer.id);
-  } catch (e) {
-    return { error: errorText(e) };
-  }
-  revalidatePath(`/invoices/${invoiceId}`);
-  return {};
-}
-
-export async function analyzeAction(invoiceId: string): Promise<FormState> {
-  const freelancer = await requireFreelancer();
-  try {
-    await analyzeInvoice(invoiceId, freelancer.id);
-  } catch (e) {
-    return { error: errorText(e) };
   }
   revalidatePath(`/invoices/${invoiceId}`);
   return {};

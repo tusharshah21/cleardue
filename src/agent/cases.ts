@@ -170,7 +170,11 @@ export const noReply = (invoice: Invoice, now: Date): Diagnosis => ({
   summary: `The client hasn't replied and the invoice is ${daysOverdue(invoice, now)} days overdue, so a friendly nudge with the pay link comes first.`,
 });
 
-export async function analyzeInvoice(invoiceId: string, freelancerId: string, model: LanguageModel = getModel(), now = new Date()) {
+/** Progress for the UI, reported as the diagnosis moves through its steps. */
+export type Stage = "reading" | "diagnosing" | "proposing" | "saving";
+
+export async function analyzeInvoice(invoiceId: string, freelancerId: string, model: LanguageModel = getModel(), now = new Date(), onStage: (s: Stage) => void = () => {}) {
+  onStage("reading");
   let invoice = await loadInvoice(invoiceId, freelancerId);
   const existing = await db.case.findUnique({ where: { invoiceId } });
   if (!isOpen(invoice)) throw new Error(`Invoice is ${invoice.status}; nothing to collect`);
@@ -178,6 +182,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
 
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
+  if (hasReply) onStage("diagnosing");
   const classification: { value: Diagnosis; fallback: boolean; error?: string } = hasReply
     ? await classifyReply(model, {
         clientName: invoice.client.name,
@@ -214,6 +219,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
 
   const ctx = gateContext(invoice, kase, now);
   const counter = { n: 0 };
+  if (c.reason !== "other") onStage("proposing");
   const tools = buildAgentTools(ctx, hooksFor(kase.id, invoice, c.confidence, counter));
   const proposal =
     c.reason === "other"
@@ -232,6 +238,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
           () => counter.n,
         );
 
+  onStage("saving");
   if (counter.n === 0) {
     const why = proposal.error ? `AI could not propose an action: ${proposal.error}` : "No automatic action fits; please review this reply";
     await db.proposedAction.create({

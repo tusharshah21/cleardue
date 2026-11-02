@@ -14,7 +14,7 @@ import { ACME_EXTRA } from "@/ai/demo-fixtures";
 import { isDemoMode } from "@/ai/provider";
 import { SimulatePaymentButton } from "@/components/simulate-payment-button";
 import { isMockMode } from "@/paypal/client";
-import { AnalyzeButton, ReplyForm } from "./case-controls";
+import { DiagnosePanel } from "./case-controls";
 import { ScopeCheck, SendDraftButton } from "./scope-check";
 import { SyncButton } from "./sync-button";
 
@@ -98,8 +98,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           ))}
           {open && kase?.state !== "dispute" ? (
             <div className="space-y-3 border-t pt-4">
-              <ReplyForm invoiceId={invoice.id} />
-              {daysOverdue(invoice) > 0 && <AnalyzeButton invoiceId={invoice.id} label={kase ? "Re-run diagnosis" : "Diagnose now"} />}
+              <DiagnosePanel invoiceId={invoice.id} analyzeLabel={daysOverdue(invoice) > 0 ? (kase ? "Re-run diagnosis" : "Diagnose now") : undefined} />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

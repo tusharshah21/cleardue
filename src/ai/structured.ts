@@ -2,7 +2,8 @@
 import { generateText, Output, type LanguageModel } from "ai";
 import type { z } from "zod";
 
-export const AI_TIMEOUT_MS = 45_000;
+/** Cap per model call (each task retries at most once). */
+export const AI_TIMEOUT_MS = 20_000;
 
 export interface StructuredResult<T> {
   value: T;
