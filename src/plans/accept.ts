@@ -1,9 +1,10 @@
 // Plans in the app: which plans a client may accept on the pay page, and applying one through PayPal.
 import type { Client, Freelancer, Invoice, Prisma } from "@/generated/prisma/client";
-import { checkAction, effectiveMandate, type Instalment, type MandateContext } from "@/agent/mandate";
+import { checkAction, effectiveMandate, type Instalment, type MandateContext, type MandateResult } from "@/agent/mandate";
 import { toAction } from "@/agent/tools";
 import { db } from "@/lib/db";
 import { newPayToken, syncInvoice } from "@/lib/invoicing";
+import { fromMinor } from "@/lib/money";
 import * as paypal from "@/paypal/invoices";
 import type { LineItem } from "@/paypal/invoices";
 import { executePlan, planOffers, replacementDrafts, sendPending, strategyFor, type PlanStore } from "./plans";
@@ -25,9 +26,24 @@ function mandateContext(invoice: PlanInvoice, caseState: string, now: Date): Man
   };
 }
 
-/** Plans the client can accept (rules in planOffers). Everything is recomputed server-side; the browser only sends
- * an index, and every plan must pass the mandate's hard limits. */
+const samePlan = (a: Instalment[], b: Instalment[]) =>
+  a.length === b.length && a.every((p, i) => p.amountMinor === b[i].amountMinor && p.dueDate.getTime() === b[i].dueDate.getTime());
+
+/** What happens when the client accepts `plan`: a plan the freelancer approved runs; otherwise the mandate decides
+ * (autopilot on: allow, autopilot off: needs_approval). */
+export function acceptanceVerdict(plan: Instalment[], approved: Instalment[] | null, ctx: MandateContext): MandateResult {
+  if (approved && samePlan(plan, approved)) return { verdict: "allow", reasons: ["you approved this plan"] };
+  return checkAction({ type: "offer_plan", instalments: plan }, ctx);
+}
+
+/** Plans the client can accept (rules in planOffers). */
 export async function planOptions(invoice: PlanInvoice, now = new Date()): Promise<Instalment[][]> {
+  return (await planState(invoice, now)).options;
+}
+
+/** Everything is recomputed server-side; the browser only sends an index, and every plan must pass the mandate's
+ * hard limits. */
+async function planState(invoice: PlanInvoice, now: Date) {
   const [kase, asked] = await Promise.all([
     db.case.findUnique({ where: { invoiceId: invoice.id }, include: { actions: { where: { type: "offer_payment_plan", status: { in: ["executed", "auto_executed"] } }, orderBy: { decidedAt: "desc" }, take: 1 } } }),
     db.payerQuestion.count({ where: { invoiceId: invoice.id, wantsPlan: true } }),
@@ -35,8 +51,9 @@ export async function planOptions(invoice: PlanInvoice, now = new Date()): Promi
   const ctx = mandateContext(invoice, kase?.state ?? "open", now);
   const offered = kase?.actions[0];
   const action = offered && toAction("offer_payment_plan", offered.params as Record<string, unknown>, { mandate: ctx, currency: invoice.currency, approverEmail: null });
+  const approved = action?.type === "offer_plan" ? action.instalments : null;
   const candidates = planOffers({
-    approved: action?.type === "offer_plan" ? action.instalments : null,
+    approved,
     reason: kase?.reason ?? null,
     askedForPlan: asked > 0,
     outstandingMinor: invoice.totalMinor - invoice.paidMinor,
@@ -44,8 +61,13 @@ export async function planOptions(invoice: PlanInvoice, now = new Date()): Promi
     originalDue: invoice.dueDate,
     now,
   });
-  return candidates.filter((instalments) => checkAction({ type: "offer_plan", instalments }, ctx).verdict !== "deny");
+  const options = candidates.filter((instalments) => checkAction({ type: "offer_plan", instalments }, ctx).verdict !== "deny");
+  return { options, approved, ctx, caseId: kase?.id ?? null };
 }
+
+/** The pay-page plan acceptance waiting for the freelancer, if any. */
+export const pendingAcceptance = (invoiceId: string) =>
+  db.proposedAction.findFirst({ where: { type: "apply_payment_plan", status: "pending", case: { invoiceId } } });
 
 function prismaStore(groupId: string, invoice: PlanInvoice): PlanStore {
   return {
@@ -79,13 +101,34 @@ function prismaStore(groupId: string, invoice: PlanInvoice): PlanStore {
   };
 }
 
-/** The client accepted plan option `index` on the pay page. */
-export async function acceptPlan(payToken: string, index: number) {
+/** The client accepted plan option `index` on the pay page. Runs it now, or queues it for the freelancer's approval. */
+export async function acceptPlan(payToken: string, index: number, now = new Date()) {
   const invoice = await db.invoice.findUnique({ where: { payToken }, include: { client: { include: { freelancer: true } } } });
   if (!invoice) throw new Error("Invoice not found");
   if (!invoice.paypalInvoiceId) throw new Error("This invoice isn't on PayPal yet, so a plan can't be set up here. Please reply to the freelancer instead.");
-  const plan = (await planOptions(invoice))[index];
+  const state = await planState(invoice, now);
+  const plan = state.options[index];
   if (!plan) throw new Error("That plan is no longer available");
+  if (await pendingAcceptance(invoice.id)) throw new Error(`${invoice.client.freelancer.name} is already confirming your plan`);
+
+  const verdict = acceptanceVerdict(plan, state.approved, state.ctx);
+  if (verdict.verdict === "deny") throw new Error("That plan is no longer available");
+  if (verdict.verdict === "needs_approval") {
+    const caseId = state.caseId ?? (await db.case.upsert({ where: { invoiceId: invoice.id }, create: { invoiceId: invoice.id }, update: {} })).id;
+    const instalments = plan.map((p) => ({ amount: fromMinor(p.amountMinor, invoice.currency), due_date: p.dueDate.toISOString().slice(0, 10) }));
+    await db.proposedAction.create({
+      data: { caseId, type: "apply_payment_plan", params: json({ instalments }), confidence: 1, mandateVerdict: "needs_approval", mandateReasons: json(verdict.reasons) },
+    });
+    await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId, kind: "plan_accepted", summary: `Client accepted a ${plan.length}-part plan on the pay page; waiting for your approval` } });
+    return { state: "awaiting_approval" as const };
+  }
+  await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "plan_accepted", summary: `Client accepted a ${plan.length}-part plan on the pay page (${verdict.reasons.join("; ")})` } });
+  return applyPlan(invoice, plan);
+}
+
+/** Replaces the invoice with the plan through PayPal (client acceptance within the mandate, or an approved acceptance). */
+export async function applyPlan(invoice: PlanInvoice, plan: Instalment[]) {
+  if (!invoice.paypalInvoiceId) throw new Error("This invoice isn't on PayPal yet");
   const existing = await db.planGroup.findUnique({ where: { originalInvoiceId: invoice.id } });
   if (existing && existing.state !== "aborted") throw new Error("A payment plan is already in place for this invoice");
 
@@ -100,7 +143,7 @@ export async function acceptPlan(payToken: string, index: number) {
   const group = existing
     ? await db.planGroup.update({ where: { id: existing.id }, data })
     : await db.planGroup.create({ data: { originalInvoiceId: invoice.id, ...data } });
-  await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "plan_accepted", summary: `Client accepted a ${plan.length}-part plan on the pay page (${strategy.replace("_", " ")})` } });
+  await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "plan_started", summary: `Setting up the ${plan.length}-part plan (${strategy.replace("_", " ")})` } });
 
   const result = await executePlan(invoice.paypalInvoiceId, drafts, paypal, prismaStore(group.id, invoice));
   await syncInvoice(invoice, "plan").catch(() => undefined);

@@ -13,7 +13,8 @@ import { formatMoney, fromMinor, splitEvenly } from "@/lib/money";
 import { daysOverdue, isOpen } from "@/lib/receivables";
 import { checkAction, effectiveMandate, type MandateContext } from "./mandate";
 import { toolkitTools, TOOLKIT_TOOLS, type ToolkitToolName } from "./toolkit";
-import { buildAgentTools, draftOf, toAction, type GateContext, type GateHooks, type Proposal } from "./tools";
+import { applyPlan } from "@/plans/accept";
+import { buildAgentTools, draftOf, planInstalments, toAction, type GateContext, type GateHooks, type Proposal } from "./tools";
 
 const DAY = 86_400_000;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -118,6 +119,8 @@ async function executeProposal(caseId: string, invoice: FullInvoice, p: Pick<Pro
       return { escalated: true };
     case "manual_review":
       return { acknowledged: true };
+    case "apply_payment_plan":
+      return applyPlan(invoice, planInstalments(p.input.instalments, invoice.currency));
     default:
       throw new Error(`Cannot execute ${p.toolName}`);
   }

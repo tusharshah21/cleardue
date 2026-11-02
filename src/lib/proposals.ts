@@ -27,6 +27,10 @@ export function describeProposal(type: string, p: Params): { title: string; deta
       const parts = Array.isArray(p.instalments) ? (p.instalments as { amount: string; due_date: string }[]) : [];
       return { title: `Offer a ${parts.length}-part payment plan`, detail: parts.map((i) => `${i.amount} on ${i.due_date}`).join(" · ") };
     }
+    case "apply_payment_plan": {
+      const parts = Array.isArray(p.instalments) ? (p.instalments as { amount: string; due_date: string }[]) : [];
+      return { title: `Client accepted a ${parts.length}-part plan: set it up on PayPal`, detail: parts.map((i) => `${i.amount} on ${i.due_date}`).join(" · ") };
+    }
     case "escalate_dispute":
       return { title: "Stop automation and escalate the dispute to you" };
     case "get_invoice":

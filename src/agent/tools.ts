@@ -72,6 +72,10 @@ export interface GateHooks {
 type Input = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
+/** Plan instalments from tool input (decimal amounts, YYYY-MM-DD dates) in minor units. */
+export const planInstalments = (instalments: unknown, currency: string) =>
+  LOCAL_TOOLS.offer_payment_plan.schema.shape.instalments.parse(instalments).map((p) => ({ amountMinor: toMinor(p.amount, currency), dueDate: dateOf(p.due_date) }));
+
 /** Translates a tool call into the action the mandate understands. Throws on input the mandate can't judge. */
 export function toAction(toolName: string, input: Input, ctx: GateContext): AgentAction {
   switch (toolName) {
@@ -100,13 +104,12 @@ export function toAction(toolName: string, input: Input, ctx: GateContext): Agen
     }
     case "pause_reminders":
       return { type: "pause_reminders", until: dateOf(LOCAL_TOOLS.pause_reminders.schema.parse(input).until) };
-    case "offer_payment_plan": {
-      const i = LOCAL_TOOLS.offer_payment_plan.schema.parse(input);
-      return {
-        type: "offer_plan",
-        instalments: i.instalments.map((p) => ({ amountMinor: toMinor(p.amount, ctx.currency), dueDate: dateOf(p.due_date) })),
-      };
-    }
+    case "offer_payment_plan":
+      LOCAL_TOOLS.offer_payment_plan.schema.parse(input);
+      return { type: "offer_plan", instalments: planInstalments(input.instalments, ctx.currency) };
+    // Not a model tool: a plan the client accepted on the pay page, waiting for the freelancer (src/plans/accept.ts).
+    case "apply_payment_plan":
+      return { type: "offer_plan", instalments: planInstalments(input.instalments, ctx.currency) };
     case "escalate_dispute":
       return { type: "escalate_to_freelancer", summary: LOCAL_TOOLS.escalate_dispute.schema.parse(input).summary };
     default:

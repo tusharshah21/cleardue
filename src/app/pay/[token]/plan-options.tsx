@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect } from "react";
 import { acceptPlanAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 
@@ -19,4 +20,14 @@ export function PlanOption({ token, index, label }: { token: string; index: numb
       )}
     </form>
   );
+}
+
+/** Re-renders the page every 10 s while the freelancer is confirming a plan. */
+export function AutoRefresh() {
+  const router = useRouter();
+  useEffect(() => {
+    const t = setInterval(() => router.refresh(), 10_000);
+    return () => clearInterval(t);
+  }, [router]);
+  return null;
 }

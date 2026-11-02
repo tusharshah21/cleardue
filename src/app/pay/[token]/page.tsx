@@ -9,11 +9,11 @@ import { Table, TableBody, TableCell, TableFooter, TableRow } from "@/components
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { daysOverdue, isOpen } from "@/lib/receivables";
-import { planOptions } from "@/plans/accept";
+import { pendingAcceptance, planOptions } from "@/plans/accept";
 import { strategyFor } from "@/plans/plans";
 import type { LineItem } from "@/paypal/invoices";
 import { PayChat, type ChatEntry } from "./pay-chat";
-import { PlanOption } from "./plan-options";
+import { AutoRefresh, PlanOption } from "./plan-options";
 
 export const metadata: Metadata = { title: "Invoice", robots: { index: false } };
 
@@ -29,7 +29,8 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
   const outstanding = invoice.totalMinor - invoice.paidMinor;
   const open = isOpen(invoice);
   const plan = await db.planGroup.findUnique({ where: { originalInvoiceId: invoice.id }, include: { invoices: { orderBy: { dueDate: "asc" } } } });
-  const options = open && !plan?.invoices.length ? await planOptions(invoice) : [];
+  const awaiting = open && !plan?.invoices.length ? await pendingAcceptance(invoice.id) : null;
+  const options = open && !plan?.invoices.length && !awaiting ? await planOptions(invoice) : [];
   const history: ChatEntry[] = invoice.payerQuestions.map((q) => ({
     question: q.question,
     answer: q.answer,
@@ -116,6 +117,16 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
               </div>
             ))}
           </CardContent>
+        </Card>
+      )}
+
+      {awaiting && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your payment plan</CardTitle>
+            <CardDescription>{client.freelancer.name.split(" ")[0]} will confirm your plan shortly. This page updates when it&apos;s ready.</CardDescription>
+          </CardHeader>
+          <AutoRefresh />
         </Card>
       )}
 

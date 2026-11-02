@@ -65,7 +65,7 @@ const stories: Story[] = [
       country: "GB",
       currency: "GBP",
       timezone: "Europe/London",
-      mandate: { toneCeiling: "friendly" },
+      mandate: { toneCeiling: "friendly", autopilot: false }, // plan acceptance waits for approval
     },
     project: {
       name: "Studio website build",
@@ -90,7 +90,7 @@ const stories: Story[] = [
   },
   {
     slug: "koala",
-    client: { name: "Koala Digital", country: "AU", currency: "AUD", timezone: "Australia/Sydney" },
+    client: { name: "Koala Digital", country: "AU", currency: "AUD", timezone: "Australia/Sydney", mandate: { autopilot: true } }, // plan acceptance runs at once
     project: {
       name: "Marketing site front end",
       scope: `Koala Digital: Marketing site front end. Scope of work.
