@@ -69,11 +69,13 @@ model Invoice {
   payerViewUrl    String?
   payToken        String          @unique
   planGroupId     String?
+  planGroup       PlanGroup?      @relation(fields: [planGroupId], references: [id])
   lastSyncedAt    DateTime?
   case            Case?
   messages        Message[]
   timeline        TimelineEvent[]
   payerQuestions  PayerQuestion[]
+  tasks           Task[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -154,6 +156,33 @@ model PayerQuestion {
   answer    String
   citations Json
   escalated Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// A payment plan the client accepted. split_invoices: the original is cancelled and replaced by one invoice
+// per instalment. partial_payment: one replacement invoice that accepts part payments (not IN/BR/IL).
+// State: drafted -> pending_send (original cancelled, a send failed; retried) -> active, or aborted.
+model PlanGroup {
+  id                String    @id @default(cuid())
+  originalInvoiceId String    @unique
+  strategy          String // split_invoices | partial_payment
+  state             String    @default("drafted")
+  instalments       Json // { amountMinor, dueDate }[]
+  error             String?
+  invoices          Invoice[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// Something the freelancer has to handle by hand (payer-assistant escalations, complaints).
+model Task {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  kind      String // escalation | complaint
+  summary   String
+  detail    String?
+  done      Boolean  @default(false)
   createdAt DateTime @default(now())
 }
 

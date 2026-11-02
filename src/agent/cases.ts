@@ -105,7 +105,7 @@ async function executeProposal(caseId: string, invoice: FullInvoice, p: Pick<Pro
         data: { clientId: client.id, invoiceId: invoice.id, direction: "OUTBOUND", channel: "outbox", toAddr: to, subject: i.subject ?? "Payment plan", body, status: "queued" },
       });
       if (p.toolName === "offer_payment_plan") {
-        // The offer is a message; the split invoices are created when the client accepts (pay page, Milestone 3).
+        // The offer is a message; the plan invoices are created when the client accepts it (src/plans/accept.ts).
         await db.case.update({ where: { id: caseId }, data: { state: "paused", pausedUntil: new Date(Date.now() + 7 * DAY) } });
       }
       return { queued: msg.id, to };
