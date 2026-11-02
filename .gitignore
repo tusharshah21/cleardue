@@ -49,3 +49,4 @@ next-env.d.ts
 /.windsurf/
 /skills-lock.json
 /.claude/
+/coverage/

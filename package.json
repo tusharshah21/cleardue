@@ -12,12 +12,16 @@
     "paypal:spike": "tsx scripts/paypal-spike.mts",
     "seed": "prisma db seed",
     "postinstall": "prisma generate",
-    "seed:paypal": "tsx prisma/seed.mts --paypal"
+    "seed:paypal": "tsx prisma/seed.mts --paypal",
+    "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.94",
     "@base-ui/react": "^1.9.0",
+    "@paypal/agent-toolkit": "^1.11.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "ai": "^7.0.159",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "iron-session": "^9.0.1",
@@ -35,6 +39,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^5.0.5",
     "dotenv": "^18.0.9",
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
