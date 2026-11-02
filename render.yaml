@@ -1,0 +1,39 @@
+# Render Blueprint. The database is Neon (external), so DATABASE_URL is set by hand in the dashboard.
+services:
+  - type: web
+    name: cleardue
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATABASE_URL
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: DEMO_MODE
+        value: "false"
+      - key: DEMO_EMAIL
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: SESSION_PASSWORD
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true

@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
+// Cache Components is off: every page here is per-user, DB-backed and request-time.
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {

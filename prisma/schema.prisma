@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Money is always integer minor units (cents) in the invoice currency.
+// PayPal status strings are stored verbatim (DRAFT, SENT, PAID, ...).
+
+model Freelancer {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  businessName String
+  country      String // ISO 3166-1 alpha-2; drives the payment-plan strategy
+  currency     String
+  timezone     String
+  mandate      Json // default mandate, see src/agent/mandate.ts
+  clients      Client[]
+  createdAt    DateTime  @default(now())
+}
+
+model Client {
+  id            String     @id @default(cuid())
+  freelancerId  String
+  freelancer    Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  name          String
+  email         String
+  approverEmail String?
+  country       String
+  currency      String
+  timezone      String // IANA, used for quiet hours
+  mandate       Json? // partial override of Freelancer.mandate (includes autopilot)
+  projects      Project[]
+  invoices      Invoice[]
+  messages      Message[]
+  createdAt     DateTime   @default(now())
+}
+
+model Project {
+  id        String    @id @default(cuid())
+  clientId  String
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String
+  scope     String // scope of record (proposal / SOW text)
+  invoices  Invoice[]
+  createdAt DateTime  @default(now())
+}
+
+model Invoice {
+  id              String          @id @default(cuid())
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id])
+  paypalInvoiceId String?         @unique
+  invoiceNumber   String?
+  status          String          @default("DRAFT")
+  currency        String
+  totalMinor      Int
+  paidMinor       Int             @default(0)
+  issueDate       DateTime        @default(now())
+  dueDate         DateTime
+  items           Json // LineItem[], see src/paypal/invoices.ts
+  note            String?
+  payerViewUrl    String?
+  payToken        String          @unique
+  planGroupId     String?
+  lastSyncedAt    DateTime?
+  case            Case?
+  messages        Message[]
+  timeline        TimelineEvent[]
+  payerQuestions  PayerQuestion[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  clientId  String
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  invoiceId String?
+  invoice   Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  direction Direction
+  channel   String // paste | email | pay_page | outbox
+  fromAddr  String?
+  toAddr    String?
+  subject   String?
+  body      String
+  status    String? // outbound only: queued | sent | failed
+  sentAt    DateTime  @default(now())
+}
+
+model Case {
+  id           String           @id @default(cuid())
+  invoiceId    String           @unique
+  invoice      Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  reason       String? // forgot | awaiting_approval | cash_constraint | dispute | ...
+  confidence   Float?
+  state        String           @default("open") // open | paused | dispute | resolved
+  pausedUntil  DateTime?
+  promisedDate DateTime?
+  actions      ProposedAction[]
+  timeline     TimelineEvent[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model ProposedAction {
+  id             String    @id @default(cuid())
+  caseId         String
+  case           Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type           String
+  params         Json
+  draft          String?
+  confidence     Float?
+  mandateVerdict String // allow | needs_approval | deny
+  mandateReasons Json
+  status         String    @default("pending") // pending | approved | rejected | executed | failed
+  result         Json?
+  createdAt      DateTime  @default(now())
+  decidedAt      DateTime?
+}
+
+model TimelineEvent {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind      String
+  summary   String
+  data      Json?
+  createdAt DateTime @default(now())
+}
+
+model PayerQuestion {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  citations Json
+  escalated Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
