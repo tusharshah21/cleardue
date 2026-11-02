@@ -93,6 +93,15 @@ export function createDraftInvoice(input: CreateInvoiceInput) {
   });
 }
 
+/** Full update of a draft (PayPal replaces the whole invoice). */
+export function updateDraftInvoice(id: string, input: CreateInvoiceInput) {
+  return paypalRequest<PayPalInvoice>(`${BASE}/${encodeURIComponent(id)}?send_to_recipient=false&send_to_invoicer=false`, {
+    method: "PUT",
+    body: { id, ...buildInvoiceBody(input) },
+    headers: { Prefer: "return=representation" },
+  });
+}
+
 export function getInvoice(id: string) {
   return paypalRequest<PayPalInvoice>(`${BASE}/${encodeURIComponent(id)}`);
 }

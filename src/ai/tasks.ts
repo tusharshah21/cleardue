@@ -2,7 +2,8 @@
 import type { LanguageModel } from "ai";
 import * as classifyPrompt from "./prompts/classify-reply";
 import * as payerPrompt from "./prompts/payer-assistant";
-import { ClassifyReplySchema, PayerAnswerSchema, type ClassifyReply, type PayerAnswer } from "./schemas";
+import * as scopePrompt from "./prompts/scope-check";
+import { ClassifyReplySchema, PayerAnswerSchema, ScopeCheckSchema, type ClassifyReply, type PayerAnswer, type ScopeCheck } from "./schemas";
 import { structured, type StructuredResult } from "./structured";
 
 export interface ThreadMessage {
@@ -46,6 +47,30 @@ export async function classifyReply(
     }),
   });
   return result.fallback ? result : { ...result, value: groundClassification(result.value, input.thread) };
+}
+
+/** Grounding guard: clauses must be verbatim from the scope; a verdict with no surviving clause becomes GRAY_ZONE. */
+export function groundScopeCheck(s: ScopeCheck, scope: string): ScopeCheck {
+  const quotedClauses = s.quotedClauses.filter((q) => norm(scope).includes(norm(q).replace(/^["']|["']$/g, "")));
+  if (quotedClauses.length) return { ...s, quotedClauses };
+  return { ...s, quotedClauses, verdict: "GRAY_ZONE", reasoning: `No scope clause could be verified for this verdict. ${s.reasoning}`.slice(0, 600) };
+}
+
+export async function scopeCheck(model: LanguageModel, input: { scope: string; request: string }): Promise<StructuredResult<ScopeCheck>> {
+  const result = await structured({
+    model,
+    schema: ScopeCheckSchema,
+    system: scopePrompt.system,
+    prompt: scopePrompt.buildPrompt(input),
+    fallback: (error): ScopeCheck => ({
+      verdict: "GRAY_ZONE",
+      quotedClauses: [],
+      reasoning: `Couldn't check this automatically (${error.slice(0, 200)}). Compare it with the scope yourself.`,
+      estimatedHours: null,
+      suggestedLineItem: null,
+    }),
+  });
+  return result.fallback ? result : { ...result, value: groundScopeCheck(result.value, input.scope) };
 }
 
 export interface PayerSources {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAccessToken, PayPalError, paypalRequest, resetTokenCache } from "./client";
-import { buildInvoiceBody, createDraftInvoice, sendInvoice } from "./invoices";
+import { buildInvoiceBody, createDraftInvoice, sendInvoice, updateDraftInvoice } from "./invoices";
 import { invoiceIdOf, verifyWebhookSignature } from "./webhooks";
 
 const json = (body: unknown, status = 200) =>
@@ -157,6 +157,15 @@ describe("invoices", () => {
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe("https://api-m.sandbox.paypal.com/v2/invoicing/invoices");
     expect(init.headers.Prefer).toBe("return=representation");
+  });
+
+  it("replaces a draft with a full PUT that doesn't notify anyone", async () => {
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json({ id: "INV2-1", status: "DRAFT", detail: { currency_code: "USD" } }));
+    await updateDraftInvoice("INV2-1", input);
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(init.method).toBe("PUT");
+    expect(url).toBe("https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV2-1?send_to_recipient=false&send_to_invoicer=false");
+    expect(JSON.parse(init.body)).toMatchObject({ id: "INV2-1", items: [{ name: "Design sprint" }, { name: "Responsive QA" }] });
   });
 
   it("extracts the payer-view link after send", async () => {

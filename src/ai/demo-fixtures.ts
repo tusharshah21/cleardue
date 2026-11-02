@@ -4,6 +4,7 @@ import type { LanguageModelV4Content } from "@ai-sdk/provider";
 import { TASK_TAG as CLASSIFY } from "./prompts/classify-reply";
 import { TASK_TAG as PAYER } from "./prompts/payer-assistant";
 import { TASK_TAG as PROPOSE } from "./prompts/propose-action";
+import { TASK_TAG as SCOPE } from "./prompts/scope-check";
 import type { Fixture } from "./replay";
 
 const text = (value: unknown): LanguageModelV4Content[] => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }];
@@ -12,6 +13,8 @@ const calls = (...c: [string, Record<string, unknown>][]): LanguageModelV4Conten
 
 const ACME = "waiting on finance sign-off";
 const BRIGHTSIDE = "Cash is tight this month";
+/** The demo's scope-check request for Acme. */
+export const ACME_EXTRA = "Could you also build the dashboard in React?";
 /** The suggested question on Koala's pay page. */
 export const KOALA = "What does 'Responsive QA' cover?";
 
@@ -81,6 +84,19 @@ export const DEMO_FIXTURES: Fixture[] = [
         },
       ]),
       text("Proposed a two-part payment plan within the mandate."),
+    ],
+  },
+  {
+    task: SCOPE,
+    match: ACME_EXTRA,
+    steps: [
+      text({
+        verdict: "OUT_OF_SCOPE",
+        quotedClauses: ["Out of scope: front-end development, copywriting, mobile app screens.", "UI design: up to 8 screens for the analytics dashboard, desktop and tablet layouts."],
+        reasoning: "Building the dashboard in React is front-end development, which the statement of work lists as out of scope. The agreed work ends at design and a Figma handoff.",
+        estimatedHours: 32,
+        suggestedLineItem: { name: "Front-end build: analytics dashboard (React)", description: "Additional work requested by Acme: building the 8 designed screens in React", hours: 32 },
+      }),
     ],
   },
   {

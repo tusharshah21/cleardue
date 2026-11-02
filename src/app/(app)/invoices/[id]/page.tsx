@@ -10,7 +10,10 @@ import { formatMoney } from "@/lib/money";
 import { REASON_LABELS } from "@/lib/proposals";
 import { daysOverdue, isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
+import { ACME_EXTRA } from "@/ai/demo-fixtures";
+import { isDemoMode } from "@/ai/provider";
 import { AnalyzeButton, ReplyForm } from "./case-controls";
+import { ScopeCheck, SendDraftButton } from "./scope-check";
 import { SyncButton } from "./sync-button";
 
 export default async function InvoicePage({ params }: PageProps<"/invoices/[id]">) {
@@ -44,10 +47,11 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={invoice.status} overdueDays={daysOverdue(invoice)} />
-          {invoice.paypalInvoiceId && <SyncButton invoiceId={invoice.id} />}
+          {invoice.status === "DRAFT" ? <SendDraftButton invoiceId={invoice.id} /> : invoice.paypalInvoiceId && <SyncButton invoiceId={invoice.id} />}
         </div>
       </div>
 
+      {invoice.status !== "DRAFT" && (
       <Card>
         <CardHeader>
           <CardDescription>Why hasn&apos;t {invoice.client.name} paid?</CardDescription>
@@ -101,6 +105,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           )}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -149,6 +154,18 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           </div>
         </CardContent>
       </Card>
+
+      {invoice.project && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Client asking for more?</CardTitle>
+            <CardDescription>Check a request against the agreed scope for {invoice.project.name}. Billable extras go onto a draft invoice in one click.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScopeCheck projectId={invoice.project.id} currency={invoice.currency} example={isDemoMode() && invoice.client.name === "Acme Labs" ? ACME_EXTRA : undefined} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

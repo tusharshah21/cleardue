@@ -6,7 +6,10 @@ import { z } from "zod";
 import { analyzeInvoice, approveProposal, rejectProposal } from "@/agent/cases";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createAndSendInvoice, syncInvoice } from "@/lib/invoicing";
+import { getModel } from "@/ai/provider";
+import type { ScopeCheck } from "@/ai/schemas";
+import { scopeCheck } from "@/ai/tasks";
+import { addLineToDraft, createAndSendInvoice, sendDraft, syncInvoice } from "@/lib/invoicing";
 import { toMinor } from "@/lib/money";
 import { acceptPlan } from "@/plans/accept";
 
@@ -187,6 +190,62 @@ export async function acceptPlanAction(payToken: string, index: number): Promise
     return { error: errorText(e) };
   }
   revalidatePath(`/pay/${payToken}`);
+  return {};
+}
+
+export type ScopeState = FormState & { result?: ScopeCheck; request?: string; rate?: string };
+
+/** Flow B: is this new request covered by the project's scope? */
+export async function scopeCheckAction(projectId: string, _: ScopeState, form: FormData): Promise<ScopeState> {
+  const freelancer = await requireFreelancer();
+  const request = String(form.get("request") ?? "").trim().slice(0, 2000);
+  if (!request) return { error: "Describe what the client is asking for." };
+  const project = await db.project.findFirst({ where: { id: projectId, client: { freelancerId: freelancer.id } } });
+  if (!project) return { error: "Project not found." };
+  const { value } = await scopeCheck(getModel(), { scope: project.scope, request });
+  // A rate stated in the scope ("USD 45/hour") pre-fills the line item.
+  const rate = /(\d+(?:\.\d{1,2})?)\s*\/\s*h(?:ou)?r/i.exec(project.scope)?.[1];
+  return { result: value, request, rate };
+}
+
+const LineInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(300),
+  hours: z.coerce.number().positive().max(500),
+  rate: z.string().trim().min(1, "set an hourly rate"),
+});
+
+export async function addLineAction(projectId: string, _: FormState, form: FormData): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  let invoiceId: string;
+  try {
+    const input = LineInput.parse(Object.fromEntries(form));
+    const project = await db.project.findFirst({ where: { id: projectId, client: { freelancerId: freelancer.id } }, include: { client: true } });
+    if (!project) return { error: "Project not found." };
+    const r = await addLineToDraft(freelancer, project.client, project.id, {
+      name: input.name,
+      ...(input.description && { description: input.description }),
+      quantity: input.hours,
+      unitAmountMinor: toMinor(input.rate, project.client.currency),
+      unit: "HOURS",
+    });
+    invoiceId = r.invoiceId;
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function sendDraftAction(invoiceId: string): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  const invoice = await db.invoice.findFirst({ where: { id: invoiceId, status: "DRAFT", client: { freelancerId: freelancer.id } }, include: { client: true } });
+  if (!invoice) return { error: "Draft not found." };
+  try {
+    await sendDraft(invoice, freelancer, invoice.client);
+  } catch (e) {
+    return { error: `Could not send. ${errorText(e)}` };
+  }
+  revalidatePath(`/invoices/${invoiceId}`);
   return {};
 }
 

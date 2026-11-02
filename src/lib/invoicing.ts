@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import type { Client, Freelancer, Invoice } from "@/generated/prisma/client";
 import { toMinor } from "@/lib/money";
-import { createDraftInvoice, getInvoice, sendInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
+import { createDraftInvoice, getInvoice, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
 import { db } from "./db";
 
 export const newPayToken = () => randomBytes(24).toString("base64url");
@@ -32,8 +32,46 @@ export interface NewInvoice {
   note?: string;
 }
 
-/** Saves the invoice locally, then creates and sends it on PayPal. Rethrows PayPal failures; a failure after the
- * PayPal draft exists keeps the local row (with a paypal_error timeline entry) so it can be retried. */
+const draftInput = (freelancer: Freelancer, client: Client, invoice: Pick<Invoice, "items" | "dueDate" | "issueDate" | "note">) => ({
+  currency: client.currency,
+  invoicerBusinessName: freelancer.businessName,
+  recipientEmail: client.email,
+  recipientName: client.name,
+  items: invoice.items as unknown as LineItem[],
+  dueDate: invoice.dueDate,
+  invoiceDate: invoice.issueDate,
+  note: invoice.note ?? undefined,
+});
+
+const paypalError = (invoiceId: string, e: unknown) =>
+  db.timelineEvent.create({ data: { invoiceId, kind: "paypal_error", summary: e instanceof Error ? e.message : String(e) } });
+
+/** Creates the PayPal draft if needed, sends it and stores the result. A failure after the PayPal draft exists keeps
+ * the local row (with a paypal_error timeline entry) so it can be retried. */
+export async function sendDraft(invoice: Invoice, freelancer: Freelancer, client: Client): Promise<Invoice> {
+  let paypalId = invoice.paypalInvoiceId;
+  try {
+    if (!paypalId) {
+      paypalId = (await createDraftInvoice(draftInput(freelancer, client, invoice))).id;
+      await db.invoice.update({ where: { id: invoice.id }, data: { paypalInvoiceId: paypalId } });
+    }
+    const { payerViewUrl } = await sendInvoice(paypalId);
+    const fresh = await getInvoice(paypalId);
+    const updated = await db.invoice.update({
+      where: { id: invoice.id },
+      data: { ...statusFields(fresh, client.currency), ...(payerViewUrl && !fresh.detail.metadata?.recipient_view_url && { payerViewUrl }) },
+    });
+    await db.timelineEvent.create({
+      data: { invoiceId: invoice.id, kind: "invoice_sent", summary: `Invoice sent through PayPal (${fresh.status})`, data: { paypalInvoiceId: paypalId } },
+    });
+    return updated;
+  } catch (e) {
+    if (paypalId) await paypalError(invoice.id, e);
+    throw e;
+  }
+}
+
+/** Saves the invoice locally, then creates and sends it on PayPal. Rethrows PayPal failures. */
 export async function createAndSendInvoice(input: NewInvoice): Promise<Invoice> {
   const { freelancer, client, items } = input;
   if (!items.length) throw new Error("An invoice needs at least one line item");
@@ -50,39 +88,36 @@ export async function createAndSendInvoice(input: NewInvoice): Promise<Invoice> 
       payToken: newPayToken(),
     },
   });
-  let paypalId: string | undefined;
   try {
-    const draft = await createDraftInvoice({
-      currency: client.currency,
-      invoicerBusinessName: freelancer.businessName,
-      recipientEmail: client.email,
-      recipientName: client.name,
-      items,
-      dueDate: input.dueDate,
-      invoiceDate: input.invoiceDate,
-      note: input.note,
-    });
-    paypalId = draft.id;
-    await db.invoice.update({ where: { id: invoice.id }, data: { paypalInvoiceId: draft.id } });
-    const { payerViewUrl } = await sendInvoice(draft.id);
-    const fresh = await getInvoice(draft.id);
-    const updated = await db.invoice.update({
-      where: { id: invoice.id },
-      data: { ...statusFields(fresh, client.currency), ...(payerViewUrl && !fresh.detail.metadata?.recipient_view_url && { payerViewUrl }) },
-    });
-    await db.timelineEvent.create({
-      data: { invoiceId: invoice.id, kind: "invoice_sent", summary: `Invoice sent through PayPal (${fresh.status})`, data: { paypalInvoiceId: draft.id } },
-    });
-    return updated;
+    return await sendDraft(invoice, freelancer, client);
   } catch (e) {
     // Nothing exists on PayPal yet: drop the local row so a retry doesn't leave duplicates.
-    if (!paypalId) {
-      await db.invoice.delete({ where: { id: invoice.id } });
-      throw e;
-    }
-    const message = e instanceof Error ? e.message : String(e);
-    await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "paypal_error", summary: message } });
+    const row = await db.invoice.findUnique({ where: { id: invoice.id } });
+    if (!row?.paypalInvoiceId) await db.invoice.delete({ where: { id: invoice.id } });
     throw e;
+  }
+}
+
+/** Flow B: adds a billable line to the project's open draft, or starts a new one due in 14 days. Saved locally first;
+ * the PayPal draft is then created or updated, and a PayPal failure is reported without losing the line. */
+export async function addLineToDraft(freelancer: Freelancer, client: Client, projectId: string, item: LineItem) {
+  const existing = await db.invoice.findFirst({ where: { projectId, status: "DRAFT", planGroupId: null }, orderBy: { createdAt: "desc" } });
+  const items = [...((existing?.items as unknown as LineItem[] | undefined) ?? []), item];
+  const data = { items: items as object[], totalMinor: lineTotal(items) };
+  const invoice = existing
+    ? await db.invoice.update({ where: { id: existing.id }, data })
+    : await db.invoice.create({ data: { ...data, clientId: client.id, projectId, currency: client.currency, dueDate: new Date(Date.now() + 14 * 86_400_000), payToken: newPayToken() } });
+  await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "line_added", summary: `Added "${item.name}" from a scope check` } });
+  try {
+    if (invoice.paypalInvoiceId) await updateDraftInvoice(invoice.paypalInvoiceId, draftInput(freelancer, client, invoice));
+    else {
+      const draft = await createDraftInvoice(draftInput(freelancer, client, invoice));
+      await db.invoice.update({ where: { id: invoice.id }, data: { paypalInvoiceId: draft.id } });
+    }
+    return { invoiceId: invoice.id };
+  } catch (e) {
+    await paypalError(invoice.id, e);
+    return { invoiceId: invoice.id, warning: `Saved as a local draft; PayPal draft not updated: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
