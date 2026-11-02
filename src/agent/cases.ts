@@ -9,6 +9,7 @@ import { classifyReply, type ThreadMessage } from "@/ai/tasks";
 import type { ClassifyReply } from "@/ai/schemas";
 import { db } from "@/lib/db";
 import { syncInvoice } from "@/lib/invoicing";
+import { actionText, verdictText } from "@/lib/proposals";
 import { formatMoney, fromMinor, splitEvenly } from "@/lib/money";
 import { daysOverdue, isOpen } from "@/lib/receivables";
 import { checkAction, effectiveMandate, type MandateContext } from "./mandate";
@@ -142,19 +143,19 @@ function hooksFor(caseId: string, invoice: FullInvoice, confidence: number, coun
           status: p.result.verdict === "deny" ? "denied" : "pending",
         },
       });
-      await timeline(invoice.id, caseId, `proposal_${p.result.verdict}`, `Agent proposed ${p.toolName}: ${p.result.verdict.replace("_", " ")} (${p.result.reasons.join("; ")})`);
+      await timeline(invoice.id, caseId, `proposal_${p.result.verdict}`, `Agent proposed ${actionText(p.toolName, p.input, invoice.client.approverEmail).doing}: ${verdictText(p.result.verdict)} (${p.result.reasons.join("; ")})`);
       return row.id;
     },
     async execute(id, p) {
       try {
         const result = await executeProposal(caseId, invoice, p);
         await db.proposedAction.update({ where: { id }, data: { status: "auto_executed", result: json(result), decidedAt: new Date() } });
-        await timeline(invoice.id, caseId, "action_executed", `Autopilot ran ${p.toolName}`, result);
+        await timeline(invoice.id, caseId, "action_executed", `Autopilot ${actionText(p.toolName, p.input, invoice.client.approverEmail).done}`, result);
         return result;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         await db.proposedAction.update({ where: { id }, data: { status: "failed", result: json({ error: message }), decidedAt: new Date() } });
-        await timeline(invoice.id, caseId, "action_failed", `${p.toolName} failed: ${message}`);
+        await timeline(invoice.id, caseId, "action_failed", `Couldn't finish ${actionText(p.toolName, p.input, invoice.client.approverEmail).doing}: ${message}`);
         throw e;
       }
     },
@@ -275,25 +276,25 @@ export async function approveProposal(proposalId: string, freelancerId: string, 
     const verdict = checkAction(toAction(p.type, input, ctx), ctx.mandate);
     if (verdict.verdict === "deny") {
       await db.proposedAction.update({ where: { id: p.id }, data: { status: "denied", mandateVerdict: "deny", mandateReasons: json(verdict.reasons), decidedAt: new Date() } });
-      await timeline(invoice.id, p.caseId, "approval_blocked", `Mandate blocked ${p.type} on approval: ${verdict.reasons.join("; ")}`);
+      await timeline(invoice.id, p.caseId, "approval_blocked", `Your mandate blocked ${actionText(p.type, input, invoice.client.approverEmail).doing} on approval: ${verdict.reasons.join("; ")}`);
       throw new Error(`Blocked by your mandate: ${verdict.reasons.join("; ")}`);
     }
   }
   try {
     const result = await executeProposal(p.caseId, invoice, { toolName: p.type, input });
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "executed", params: json(input), draft: draftOf(p.type, input), result: json(result), decidedAt: new Date() } });
-    await timeline(invoice.id, p.caseId, "action_approved", `You approved ${p.type}${edited ? " (edited)" : ""}`, result);
+    await timeline(invoice.id, p.caseId, "action_approved", `You approved ${actionText(p.type, input, invoice.client.approverEmail).doing}${edited ? " (edited)" : ""}`, result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "failed", result: json({ error: message }), decidedAt: new Date() } });
-    await timeline(invoice.id, p.caseId, "action_failed", `${p.type} failed: ${message}`);
+    await timeline(invoice.id, p.caseId, "action_failed", `Couldn't finish ${actionText(p.type, input, invoice.client.approverEmail).doing}: ${message}`);
     throw e;
   }
 }
 
 export async function rejectProposal(proposalId: string, freelancerId: string) {
-  const p = await db.proposedAction.findFirst({ where: { id: proposalId, status: "pending", case: { invoice: { client: { freelancerId } } } }, include: { case: true } });
+  const p = await db.proposedAction.findFirst({ where: { id: proposalId, status: "pending", case: { invoice: { client: { freelancerId } } } }, include: { case: { include: { invoice: { include: { client: true } } } } } });
   if (!p) throw new Error("Proposal not found or already decided");
   await db.proposedAction.update({ where: { id: p.id }, data: { status: "rejected", decidedAt: new Date() } });
-  await timeline(p.case.invoiceId, p.caseId, "action_rejected", `You rejected ${p.type}`);
+  await timeline(p.case.invoiceId, p.caseId, "action_rejected", `You rejected ${actionText(p.type, p.params as Record<string, unknown>, p.case.invoice.client.approverEmail).doing}`);
 }

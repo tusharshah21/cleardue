@@ -44,9 +44,51 @@ export function describeProposal(type: string, p: Params): { title: string; deta
     case "manual_review":
       return { title: "Needs your review" };
     default:
-      return { title: type };
+      return { title: "Agent action" };
   }
 }
+
+/** The action as plain English for the timeline, in two forms: "sending a PayPal reminder to…" and "sent a PayPal
+ * reminder to…". Never shows tool names. */
+export function actionText(type: string, p: Params, approverEmail: string | null): { doing: string; done: string } {
+  const both = (doing: string, done: string) => ({ doing, done });
+  switch (type) {
+    case "send_invoice_reminder": {
+      const extra = Array.isArray(p.additional_recipients) ? p.additional_recipients.map(String) : [];
+      const others = extra.map((e) => (e === approverEmail ? "their AP contact" : e));
+      const to = others.length ? `the client and ${others.join(" and ")}` : "the client";
+      return both(`sending a PayPal reminder to ${to}`, `sent a PayPal reminder to ${to}`);
+    }
+    case "send_message": {
+      const to = p.to === "approver" ? "the client's AP contact" : "the client";
+      return both(`emailing ${to}`, `queued an email to ${to} in your Outbox`);
+    }
+    case "pause_reminders":
+      return both(`pausing reminders until ${p.until}`, `paused reminders until ${p.until}`);
+    case "offer_payment_plan":
+    case "apply_payment_plan": {
+      const n = Array.isArray(p.instalments) ? p.instalments.length : 0;
+      return type === "offer_payment_plan"
+        ? both(`offering a ${n}-part payment plan`, `offered a ${n}-part payment plan`)
+        : both(`setting up the client's ${n}-part payment plan on PayPal`, `set up the client's ${n}-part payment plan on PayPal`);
+    }
+    case "escalate_dispute":
+      return both("escalating the dispute to you", "escalated the dispute to you");
+    case "get_invoice":
+      return both("checking the invoice on PayPal", "checked the invoice on PayPal");
+    case "cancel_sent_invoice":
+      return both("cancelling the PayPal invoice", "cancelled the PayPal invoice");
+    case "record_payment_for_invoice":
+      return both("recording a payment on PayPal", "recorded a payment on PayPal");
+    case "manual_review":
+      return both("a review by you", "flagged this for your review");
+    default:
+      return both("an action", "took an action");
+  }
+}
+
+const VERDICT_TEXT: Record<string, string> = { allow: "allowed by your mandate", needs_approval: "needs your approval", deny: "blocked by your mandate" };
+export const verdictText = (verdict: string) => VERDICT_TEXT[verdict] ?? verdict;
 
 export const STATUS_LABELS: Record<string, string> = {
   pending: "Waiting for you",
