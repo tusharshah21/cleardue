@@ -13,7 +13,8 @@
     "seed": "prisma db seed",
     "postinstall": "prisma generate",
     "seed:paypal": "tsx prisma/seed.mts --paypal",
-    "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts"
+    "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts",
+    "paypal:webhook": "tsx scripts/paypal-webhook.mts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.94",

@@ -86,15 +86,49 @@ export async function createAndSendInvoice(input: NewInvoice): Promise<Invoice> 
   }
 }
 
-/** Pulls the latest status from PayPal. Used by the sync button now and the polling job in M2. */
-export async function syncInvoice(invoice: Invoice): Promise<Invoice> {
+const CLOSED = ["PAID", "MARKED_AS_PAID", "CANCELLED", "REFUNDED", "MARKED_AS_REFUNDED"];
+
+/** Pulls the latest status from PayPal (sync button, webhooks, polling). PayPal is the source of truth:
+ * webhook payloads only tell us *which* invoice to re-read. A closed invoice resolves its case. */
+export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<Invoice> {
   if (!invoice.paypalInvoiceId) return invoice;
   const fresh = await getInvoice(invoice.paypalInvoiceId);
   const updated = await db.invoice.update({ where: { id: invoice.id }, data: statusFields(fresh, invoice.currency) });
-  if (updated.status !== invoice.status) {
+  if (updated.status === invoice.status) return updated;
+  const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
+  await db.timelineEvent.create({
+    data: { invoiceId: invoice.id, caseId: kase?.id, kind: "status_changed", summary: `PayPal status ${invoice.status} → ${updated.status} (${source})` },
+  });
+  if (kase && CLOSED.includes(updated.status) && kase.state !== "resolved") {
+    await db.case.update({ where: { id: kase.id }, data: { state: "resolved", pausedUntil: null } });
+    await db.proposedAction.updateMany({ where: { caseId: kase.id, status: "pending" }, data: { status: "rejected", decidedAt: new Date(), result: { superseded: `invoice ${updated.status}` } } });
     await db.timelineEvent.create({
-      data: { invoiceId: invoice.id, kind: "status_changed", summary: `PayPal status ${invoice.status} → ${updated.status}` },
+      data: { invoiceId: invoice.id, caseId: kase.id, kind: "case_resolved", summary: `Case closed: invoice is ${updated.status.replaceAll("_", " ").toLowerCase()}` },
     });
   }
   return updated;
+}
+
+/** Polling fallback for unreliable webhooks: re-reads open invoices not synced recently, and ends expired pauses. */
+export async function syncStale(maxAgeMs = 2 * 60_000, limit = 50) {
+  const cutoff = new Date(Date.now() - maxAgeMs);
+  const invoices = await db.invoice.findMany({
+    where: { paypalInvoiceId: { not: null }, status: { notIn: [...CLOSED, "DRAFT"] }, OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: cutoff } }] },
+    orderBy: { lastSyncedAt: { sort: "asc", nulls: "first" } },
+    take: limit,
+  });
+  const errors: string[] = [];
+  for (const inv of invoices) {
+    try {
+      await syncInvoice(inv, "polling");
+    } catch (e) {
+      errors.push(`${inv.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  const expired = await db.case.findMany({ where: { state: "paused", pausedUntil: { lte: new Date() } } });
+  for (const c of expired) {
+    await db.case.update({ where: { id: c.id }, data: { state: "open", pausedUntil: null } });
+    await db.timelineEvent.create({ data: { invoiceId: c.invoiceId, caseId: c.id, kind: "pause_ended", summary: "Pause ended; the case is open again" } });
+  }
+  return { synced: invoices.length - errors.length, errors, pausesEnded: expired.length };
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAccessToken, PayPalError, paypalRequest, resetTokenCache } from "./client";
 import { buildInvoiceBody, createDraftInvoice, sendInvoice } from "./invoices";
+import { invoiceIdOf, verifyWebhookSignature } from "./webhooks";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -79,6 +80,43 @@ describe("PayPal client", () => {
   it("handles empty 204 bodies", async () => {
     fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(new Response(null, { status: 204 }));
     await expect(paypalRequest("/x", { method: "POST" })).resolves.toBeUndefined();
+  });
+});
+
+describe("webhooks", () => {
+  const signed = new Headers({
+    "paypal-transmission-id": "t1",
+    "paypal-transmission-sig": "sig",
+    "paypal-transmission-time": "2026-11-10T00:00:00Z",
+    "paypal-cert-url": "https://api.sandbox.paypal.com/cert",
+    "paypal-auth-algo": "SHA256withRSA",
+  });
+  const event = { id: "WH-1", event_type: "INVOICING.INVOICE.PAID", resource: { invoice: { id: "INV2-9" } } };
+
+  it("verifies through PayPal and sends the event back unchanged", async () => {
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WHID");
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json({ verification_status: "SUCCESS" }));
+    await expect(verifyWebhookSignature(signed, event)).resolves.toEqual({ verified: true });
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(fetchMock.mock.calls[1][0]).toContain("/v1/notifications/verify-webhook-signature");
+    expect(body).toMatchObject({ webhook_id: "WHID", transmission_id: "t1", transmission_sig: "sig", webhook_event: event });
+  });
+
+  it("rejects FAILURE, missing headers, a missing webhook id, and API errors", async () => {
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WHID");
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json({ verification_status: "FAILURE" }));
+    await expect(verifyWebhookSignature(signed, event)).resolves.toEqual({ verified: false, reason: "verification_status FAILURE" });
+    await expect(verifyWebhookSignature(new Headers(), event)).resolves.toMatchObject({ verified: false, reason: "missing PayPal signature headers" });
+    fetchMock.mockResolvedValueOnce(json({ message: "boom" }, 500));
+    await expect(verifyWebhookSignature(signed, event)).resolves.toMatchObject({ verified: false });
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    await expect(verifyWebhookSignature(signed, event)).resolves.toMatchObject({ verified: false, reason: "PAYPAL_WEBHOOK_ID is not set" });
+  });
+
+  it("finds the invoice id in v2 and flat resources", () => {
+    expect(invoiceIdOf(event)).toBe("INV2-9");
+    expect(invoiceIdOf({ id: "x", event_type: "y", resource: { id: "INV2-8" } })).toBe("INV2-8");
+    expect(invoiceIdOf({ id: "x", event_type: "y" })).toBeNull();
   });
 });
 

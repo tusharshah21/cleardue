@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { analyzeInvoice, approveProposal, rejectProposal } from "@/agent/cases";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createAndSendInvoice, syncInvoice } from "@/lib/invoicing";
@@ -12,8 +13,16 @@ export interface FormState {
   error?: string;
 }
 
-const errorText = (e: unknown) =>
-  e instanceof z.ZodError ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : e instanceof Error ? e.message : String(e);
+function errorText(e: unknown): string {
+  if (e instanceof z.ZodError) return e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+  // Database internals are for the logs, not the screen.
+  if (e instanceof Error && e.constructor.name.startsWith("PrismaClient")) {
+    console.error(e);
+    return "Something went wrong saving this. Check the server logs.";
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  return message.length > 300 ? `${message.slice(0, 300)}…` : message;
+}
 
 export async function loginAction(_: FormState, form: FormData): Promise<FormState> {
   const ok = await logIn(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
@@ -121,5 +130,60 @@ export async function syncInvoiceAction(invoiceId: string): Promise<FormState> {
     return { error: `Sync failed. ${errorText(e)}` };
   }
   revalidatePath(`/invoices/${invoiceId}`);
+  return {};
+}
+
+const ReplyInput = z.object({ body: z.string().trim().min(1, "paste the client's message").max(5000) });
+
+/** Flow C entry: paste a client reply, then diagnose and propose actions. */
+export async function addReplyAction(invoiceId: string, _: FormState, form: FormData): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  try {
+    const { body } = ReplyInput.parse({ body: form.get("body") });
+    const invoice = await db.invoice.findFirst({ where: { id: invoiceId, client: { freelancerId: freelancer.id } } });
+    if (!invoice) return { error: "Invoice not found." };
+    await db.message.create({ data: { clientId: invoice.clientId, invoiceId, direction: "INBOUND", channel: "paste", body } });
+    await analyzeInvoice(invoiceId, freelancer.id);
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath(`/invoices/${invoiceId}`);
+  return {};
+}
+
+export async function analyzeAction(invoiceId: string): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  try {
+    await analyzeInvoice(invoiceId, freelancer.id);
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath(`/invoices/${invoiceId}`);
+  return {};
+}
+
+export async function decideProposalAction(proposalId: string, _: FormState, form: FormData): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  try {
+    if (form.get("decision") === "reject") await rejectProposal(proposalId, freelancer.id);
+    else {
+      const draft = form.get("draft");
+      await approveProposal(proposalId, freelancer.id, typeof draft === "string" ? draft.slice(0, 4000) : undefined);
+    }
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath("/", "layout");
+  return {};
+}
+
+export async function markSentAction(messageId: string): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  const updated = await db.message.updateMany({
+    where: { id: messageId, direction: "OUTBOUND", status: "queued", client: { freelancerId: freelancer.id } },
+    data: { status: "sent", sentAt: new Date() },
+  });
+  if (!updated.count) return { error: "Message not found or already sent." };
+  revalidatePath("/outbox");
   return {};
 }

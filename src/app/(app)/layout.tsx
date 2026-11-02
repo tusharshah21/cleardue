@@ -2,15 +2,18 @@ import Link from "next/link";
 import { logoutAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { requireFreelancer } from "@/lib/auth";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/clients", label: "Clients" },
-  { href: "/invoices/new", label: "New invoice" },
-];
+import { db } from "@/lib/db";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const freelancer = await requireFreelancer();
+  const pending = await db.proposedAction.count({ where: { status: "pending", case: { invoice: { client: { freelancerId: freelancer.id } } } } });
+  const nav = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/approvals", label: "Approvals", count: pending },
+    { href: "/outbox", label: "Outbox" },
+    { href: "/clients", label: "Clients" },
+    { href: "/invoices/new", label: "New invoice" },
+  ];
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="border-b bg-muted/40 p-4 md:w-56 md:border-r md:border-b-0">
@@ -18,10 +21,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           ClearDue
         </Link>
         <p className="mt-1 text-xs text-muted-foreground">{freelancer.businessName}</p>
-        <nav className="mt-6 flex gap-1 md:flex-col">
+        <nav className="mt-6 flex flex-wrap gap-1 md:flex-col">
           {nav.map((n) => (
-            <Link key={n.href} href={n.href} className="rounded-md px-3 py-2 text-sm hover:bg-muted">
+            <Link key={n.href} href={n.href} className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted">
               {n.label}
+              {!!n.count && (
+                <span className="rounded-full bg-primary px-2 text-xs text-primary-foreground" aria-label={`${n.count} waiting`}>
+                  {n.count}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

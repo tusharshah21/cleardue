@@ -138,7 +138,10 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
   }
 
   // The agent may only touch this case's invoice.
-  if ("invoiceId" in action && action.invoiceId !== invoice.paypalInvoiceId) deny.push("action targets a different invoice");
+  if ("invoiceId" in action) {
+    if (!invoice.paypalInvoiceId) deny.push("invoice is not on PayPal yet");
+    else if (action.invoiceId !== invoice.paypalInvoiceId) deny.push("action targets a different invoice");
+  }
 
   switch (action.type) {
     case "read_invoice":

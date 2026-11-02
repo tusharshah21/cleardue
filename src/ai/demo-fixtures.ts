@@ -44,7 +44,7 @@ export const DEMO_FIXTURES: Fixture[] = [
         ],
         ["pause_reminders", { until: "{{in_7_days}}", reason: "Waiting on Acme finance sign-off; check back in a week." }],
       ),
-      text("Sent the invoice to Acme's accounts payable contact and paused reminders for a week while finance signs off."),
+      text("Proposed sending the invoice to Acme's accounts payable contact and pausing reminders for a week while finance signs off."),
     ],
   },
   {
@@ -77,7 +77,7 @@ export const DEMO_FIXTURES: Fixture[] = [
             "Hi Sam, of course, happy to split it. How about {{currency}} {{suggested_split.0}} now and {{currency}} {{suggested_split.1}} on {{in_30_days}}? I'll send two smaller PayPal invoices so it's easy on your side. You can accept the plan here: {{pay_link}}. Cheers, Aarav",
         },
       ]),
-      text("Offered a two-part payment plan within the mandate."),
+      text("Proposed a two-part payment plan within the mandate."),
     ],
   },
 ];

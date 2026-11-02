@@ -2,7 +2,7 @@
 
 An AI collections agent for solo freelancers who bill overseas clients through PayPal. ClearDue works out *why* a client hasn't paid (forgot, waiting on approval, short on cash, disputing the work, wrong contact) and takes the matching action, always inside limits the freelancer sets. Clients get an assistant on the pay page that answers questions from the agreed scope.
 
-> Status: Milestone 1 (foundation). The full README (architecture, PayPal and AI usage, evals, limitations) lands in Milestone 4.
+> Status: Milestone 2 (agent core). The full README (architecture, PayPal and AI usage, evals, limitations) lands in Milestone 4.
 
 ## Stack
 
@@ -47,6 +47,20 @@ npm run paypal:spike
 
 It creates, sends, reminds and silently cancels a USD invoice, tests whether `partial_payment` is allowed for this account, and writes the results to `docs/progress/paypal-spike.json`.
 
+## Webhooks and polling
+
+Create the webhook once your app has a public URL (Render, or a tunnel locally):
+
+```bash
+npm run paypal:webhook -- create https://<your-app>/api/webhooks/paypal
+```
+
+Put the printed id in `PAYPAL_WEBHOOK_ID`. It subscribes `INVOICING.INVOICE.PAID`, `UPDATED`, `CANCELLED` and `REFUNDED`. Every event is checked with PayPal's verify-webhook-signature endpoint and stored in the `WebhookEvent` table (idempotent by event id). The payload is never trusted for state: ClearDue re-reads the invoice from PayPal.
+
+PayPal's webhook simulator sends mock events that [cannot pass verify-webhook-signature](https://developer.paypal.com/api/rest/webhooks/simulator/). They are rejected (and labelled) unless `ALLOW_UNVERIFIED_WEBHOOKS=true` outside production. Real sandbox payments produce verifiable events.
+
+Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`) re-syncs open invoices and ends expired pauses. The Render blueprint runs it every 5 minutes as a cron job, and the dashboard also triggers it after each load.
+
 ## Environment variables
 
 See [.env.example](.env.example). Never commit `.env`.
@@ -56,9 +70,10 @@ See [.env.example](.env.example). Never commit `.env`.
 | `DATABASE_URL` | Postgres connection string (local Docker or Neon) |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox REST app credentials |
 | `PAYPAL_BASE_URL` | Must be `https://api-m.sandbox.paypal.com` |
-| `PAYPAL_WEBHOOK_ID` | Webhook ID for signature verification (Milestone 2) |
+| `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
+| `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
-| `DEMO_MODE` | Replays recorded AI responses for the seeded clients |
+| `DEMO_MODE` | `true` replays recorded AI responses for the seeded Acme and Brightside stories; other prompts go to the live model |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; session secret needs 32+ chars |
 | `APP_URL` | Public base URL for client pay-page links |
 | `CRON_SECRET` | Protects the polling sync endpoint |

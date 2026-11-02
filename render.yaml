@@ -37,3 +37,21 @@ services:
         sync: false
       - key: CRON_SECRET
         generateValue: true
+  # Polling fallback: re-syncs open invoices every 5 minutes (webhooks can be late or missing).
+  - type: cron
+    name: cleardue-sync
+    runtime: node
+    schedule: "*/5 * * * *"
+    buildCommand: "true"
+    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/sync"'
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: cleardue
+          envVarKey: CRON_SECRET
+      - key: APP_URL
+        fromService:
+          type: web
+          name: cleardue
+          envVarKey: APP_URL

@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
+import { ProposalCard } from "@/components/proposal-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
-import { daysOverdue } from "@/lib/receivables";
+import { REASON_LABELS } from "@/lib/proposals";
+import { daysOverdue, isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
+import { AnalyzeButton, ReplyForm } from "./case-controls";
 import { SyncButton } from "./sync-button";
 
 export default async function InvoicePage({ params }: PageProps<"/invoices/[id]">) {
@@ -19,9 +23,13 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
       project: true,
       messages: { orderBy: { sentAt: "asc" } },
       timeline: { orderBy: { createdAt: "desc" } },
+      case: { include: { actions: { orderBy: { createdAt: "desc" }, take: 12 } } },
     },
   });
   if (!invoice) notFound();
+  const kase = invoice.case;
+  const evidence = (kase?.evidence as string[] | null) ?? [];
+  const open = isOpen(invoice);
   const items = invoice.items as unknown as LineItem[];
   const payLink = `${process.env.APP_URL ?? ""}/pay/${invoice.payToken}`;
 
@@ -39,6 +47,60 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           {invoice.paypalInvoiceId && <SyncButton invoiceId={invoice.id} />}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardDescription>Why hasn&apos;t {invoice.client.name} paid?</CardDescription>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            {kase?.reason ? REASON_LABELS[kase.reason] ?? kase.reason : "Not diagnosed yet"}
+            {kase?.confidence != null && <Badge variant="outline">confidence {kase.confidence.toFixed(2)}</Badge>}
+            {kase && kase.state !== "open" && (
+              <Badge variant={kase.state === "dispute" ? "destructive" : "secondary"}>
+                {kase.state}
+                {kase.state === "paused" && kase.pausedUntil && ` until ${kase.pausedUntil.toISOString().slice(0, 10)}`}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {kase?.summary && <p className="text-sm">{kase.summary}</p>}
+          {evidence.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Evidence from the client&apos;s words</p>
+              {evidence.map((q) => (
+                <blockquote key={q} className="border-l-2 pl-3 text-sm italic">
+                  &ldquo;{q}&rdquo;
+                </blockquote>
+              ))}
+            </div>
+          )}
+          {kase?.actions.map((a) => (
+            <ProposalCard
+              key={a.id}
+              p={{
+                id: a.id,
+                type: a.type,
+                status: a.status,
+                mandateVerdict: a.mandateVerdict,
+                mandateReasons: a.mandateReasons as string[],
+                draft: a.draft,
+                params: a.params as Record<string, unknown>,
+                result: a.result,
+              }}
+            />
+          ))}
+          {open && kase?.state !== "dispute" ? (
+            <div className="space-y-3 border-t pt-4">
+              <ReplyForm invoiceId={invoice.id} />
+              {daysOverdue(invoice) > 0 && <AnalyzeButton invoiceId={invoice.id} label={kase ? "Re-run diagnosis" : "Diagnose now"} />}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {open ? "Automation is stopped while this is in dispute. Reply to the client yourself." : "Nothing left to collect on this invoice."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

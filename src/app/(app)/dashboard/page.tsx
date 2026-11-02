@@ -1,15 +1,19 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { StatusBadge } from "@/components/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { syncStale } from "@/lib/invoicing";
 import { formatMoney } from "@/lib/money";
 import { daysOverdue, isOpen, sumByCurrency } from "@/lib/receivables";
 
 export default async function DashboardPage() {
   const freelancer = await requireFreelancer();
+  // Webhooks can be late or missing; refresh stale invoices after this response is sent.
+  after(() => syncStale().catch((e) => console.error("background sync failed", e)));
   const invoices = await db.invoice.findMany({
     where: { client: { freelancerId: freelancer.id } },
     include: { client: true },

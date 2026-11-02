@@ -237,7 +237,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
     });
     await timeline(invoiceId, kase.id, "manual_review", why);
   } else if (proposal.rationale) {
-    await timeline(invoiceId, kase.id, "agent_summary", proposal.rationale);
+    await timeline(invoiceId, kase.id, "agent_summary", `Agent's note: ${proposal.rationale}`);
   }
   return kase.id;
 }
@@ -250,7 +250,8 @@ export async function approveProposal(proposalId: string, freelancerId: string, 
   if (p.status !== "pending") throw new Error(`Proposal is already ${p.status}`);
   const invoice = await loadInvoice(p.case.invoiceId, freelancerId);
   const input = { ...(p.params as Record<string, unknown>) };
-  if (editedDraft !== undefined) {
+  const edited = editedDraft !== undefined && editedDraft !== p.draft;
+  if (edited) {
     const field = { send_message: "body", send_invoice_reminder: "note", offer_payment_plan: "message", escalate_dispute: "summary" }[p.type];
     if (field) input[field] = editedDraft;
   }
@@ -266,7 +267,7 @@ export async function approveProposal(proposalId: string, freelancerId: string, 
   try {
     const result = await executeProposal(p.caseId, invoice, { toolName: p.type, input });
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "executed", params: json(input), draft: draftOf(p.type, input), result: json(result), decidedAt: new Date() } });
-    await timeline(invoice.id, p.caseId, "action_approved", `You approved ${p.type}${editedDraft !== undefined ? " (edited)" : ""}`, result);
+    await timeline(invoice.id, p.caseId, "action_approved", `You approved ${p.type}${edited ? " (edited)" : ""}`, result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "failed", result: json({ error: message }), decidedAt: new Date() } });

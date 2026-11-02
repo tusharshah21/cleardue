@@ -107,8 +107,10 @@ describe("checkAction: contact actions", () => {
   it("denies reminders on invoices that are not open", () => {
     expect(checkAction(reminder(), ctx({ invoice: { ...ctx().invoice, status: "PAID" } })).verdict).toBe("deny");
   });
-  it("denies actions on a different invoice", () => {
+  it("denies actions on a different invoice, or when the invoice isn't on PayPal", () => {
     expect(checkAction(reminder({ invoiceId: "INV2-OTHER" }), ctx()).reasons).toContain("action targets a different invoice");
+    const local = ctx({ invoice: { ...ctx().invoice, paypalInvoiceId: null } });
+    expect(checkAction(reminder({ invoiceId: "" }), local).reasons).toContain("invoice is not on PayPal yet");
   });
   it("needs approval for never-auto-contact clients", () => {
     const r = checkAction(message(), ctx({}, { neverAutoContact: true }));
