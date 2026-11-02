@@ -2,6 +2,7 @@
 // Each fixture is keyed by a task tag plus a phrase from the seeded client reply.
 import type { LanguageModelV4Content } from "@ai-sdk/provider";
 import { TASK_TAG as CLASSIFY } from "./prompts/classify-reply";
+import { TASK_TAG as PAYER } from "./prompts/payer-assistant";
 import { TASK_TAG as PROPOSE } from "./prompts/propose-action";
 import type { Fixture } from "./replay";
 
@@ -11,6 +12,8 @@ const calls = (...c: [string, Record<string, unknown>][]): LanguageModelV4Conten
 
 const ACME = "waiting on finance sign-off";
 const BRIGHTSIDE = "Cash is tight this month";
+/** The suggested question on Koala's pay page. */
+export const KOALA = "What does 'Responsive QA' cover?";
 
 export const DEMO_FIXTURES: Fixture[] = [
   {
@@ -78,6 +81,24 @@ export const DEMO_FIXTURES: Fixture[] = [
         },
       ]),
       text("Proposed a two-part payment plan within the mandate."),
+    ],
+  },
+  {
+    task: PAYER,
+    match: KOALA,
+    steps: [
+      text({
+        answer:
+          "Responsive QA covers testing on the latest two versions of Chrome, Safari, Firefox and Edge, on iOS and Android phones and tablets, at four breakpoints (360, 768, 1024 and 1440 px), including fixes for any layout bugs found. It doesn't include Internet Explorer, legacy browsers or performance optimisation. On this invoice it's a fixed line of AUD 600.00.",
+        citations: [
+          { source: "scope", quote: "Responsive QA: testing on the latest two versions of Chrome, Safari, Firefox and Edge, on iOS and Android phones and tablets" },
+          { source: "scope", quote: "Excludes Internet Explorer, legacy browsers and performance optimisation." },
+          { source: "invoice", quote: "Responsive QA: 1 x AUD 600.00" },
+        ],
+        escalate: false,
+        escalationReason: null,
+        complaint: false,
+      }),
     ],
   },
 ];

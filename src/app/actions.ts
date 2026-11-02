@@ -8,6 +8,7 @@ import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createAndSendInvoice, syncInvoice } from "@/lib/invoicing";
 import { toMinor } from "@/lib/money";
+import { acceptPlan } from "@/plans/accept";
 
 export interface FormState {
   error?: string;
@@ -173,6 +174,26 @@ export async function decideProposalAction(proposalId: string, _: FormState, for
   } catch (e) {
     return { error: errorText(e) };
   }
+  revalidatePath("/", "layout");
+  return {};
+}
+
+/** Public (pay page): the pay token is the credential, and the plan is looked up server-side by index. */
+export async function acceptPlanAction(payToken: string, index: number): Promise<FormState> {
+  try {
+    const r = await acceptPlan(payToken, index);
+    if (r.state === "pending_send") return { error: "Your plan is set up. One of the new invoices is still being sent; it will arrive shortly." };
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath(`/pay/${payToken}`);
+  return {};
+}
+
+export async function completeTaskAction(taskId: string): Promise<FormState> {
+  const freelancer = await requireFreelancer();
+  const updated = await db.task.updateMany({ where: { id: taskId, done: false, invoice: { client: { freelancerId: freelancer.id } } }, data: { done: true } });
+  if (!updated.count) return { error: "Task not found or already handled." };
   revalidatePath("/", "layout");
   return {};
 }

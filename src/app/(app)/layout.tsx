@@ -6,7 +6,11 @@ import { db } from "@/lib/db";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const freelancer = await requireFreelancer();
-  const pending = await db.proposedAction.count({ where: { status: "pending", case: { invoice: { client: { freelancerId: freelancer.id } } } } });
+  const [proposals, tasks] = await Promise.all([
+    db.proposedAction.count({ where: { status: "pending", case: { invoice: { client: { freelancerId: freelancer.id } } } } }),
+    db.task.count({ where: { done: false, invoice: { client: { freelancerId: freelancer.id } } } }),
+  ]);
+  const pending = proposals + tasks;
   const nav = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/approvals", label: "Approvals", count: pending },
