@@ -2,7 +2,16 @@
 
 An AI collections agent for solo freelancers who bill overseas clients through PayPal. ClearDue works out *why* a client hasn't paid (forgot, waiting on approval, short on cash, disputing the work, wrong contact) and takes the matching action, always inside limits the freelancer sets. Clients get an assistant on the pay page that answers questions from the agreed scope.
 
-> Status: Milestone 2 (agent core). The full README (architecture, PayPal and AI usage, evals, limitations) lands in Milestone 4.
+> Status: Milestone 3 (pay page, scope check, payment plans). The full README (architecture, PayPal and AI usage, evals, limitations) lands in Milestone 4.
+
+## Payment plans and the India constraint
+
+PayPal doesn't allow partial payments on invoices from merchants in India, Brazil or Israel. ClearDue picks a plan strategy from the freelancer's country, behind one pipeline (`src/plans`):
+
+- `split_invoices` (IN, BR, IL): the original invoice is replaced by one PayPal invoice per instalment.
+- `partial_payment` (everyone else): one replacement invoice that accepts part payments, with the first instalment as the minimum.
+
+Either way the client always has something payable: the new drafts are created first, the original is re-read and only cancelled if it is still unpaid (silently, `send_to_recipient=false`), then the drafts are sent. If a send fails after the cancel, the plan stays `pending_send` and polling retries it.
 
 ## Stack
 
@@ -73,7 +82,7 @@ See [.env.example](.env.example). Never commit `.env`.
 | `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
-| `DEMO_MODE` | `true` replays recorded AI responses for the seeded Acme and Brightside stories; other prompts go to the live model |
+| `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories (Acme diagnosis and scope check, Brightside plan, Koala's pay-page question); other prompts go to the live model |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; session secret needs 32+ chars |
 | `APP_URL` | Public base URL for client pay-page links |
 | `CRON_SECRET` | Protects the polling sync endpoint |
