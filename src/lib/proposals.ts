@@ -2,6 +2,7 @@
 type Params = Record<string, unknown>;
 
 export const REASON_LABELS: Record<string, string> = {
+  no_response: "No reply yet",
   forgot: "Forgot",
   awaiting_approval: "Awaiting approval",
   cash_constraint: "Cash constraint",

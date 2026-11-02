@@ -158,14 +158,16 @@ function hooksFor(caseId: string, invoice: FullInvoice, confidence: number, coun
   };
 }
 
-/** The diagnosis when the client hasn't replied at all: no AI call needed. */
-const noReply = (invoice: Invoice, now: Date): ClassifyReply => ({
-  reason: "forgot",
-  confidence: 0.7,
+/** A classification, or the fact that the client hasn't replied at all (no AI call, so no guess: confidence 1). */
+type Diagnosis = Omit<ClassifyReply, "reason"> & { reason: ClassifyReply["reason"] | "no_response" };
+
+export const noReply = (invoice: Invoice, now: Date): Diagnosis => ({
+  reason: "no_response",
+  confidence: 1,
   evidence: [],
   promisedDate: null,
   approverEmail: null,
-  summary: `No reply yet and the invoice is ${daysOverdue(invoice, now)} days overdue, so a friendly nudge comes first.`,
+  summary: `The client hasn't replied and the invoice is ${daysOverdue(invoice, now)} days overdue, so a friendly nudge with the pay link comes first.`,
 });
 
 export async function analyzeInvoice(invoiceId: string, freelancerId: string, model: LanguageModel = getModel(), now = new Date()) {
@@ -176,7 +178,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
 
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
-  const classification = hasReply
+  const classification: { value: Diagnosis; fallback: boolean; error?: string } = hasReply
     ? await classifyReply(model, {
         clientName: invoice.client.name,
         invoiceSummary: `${formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency)} outstanding, due ${ymd(invoice.dueDate)}, ${daysOverdue(invoice, now)} days overdue`,

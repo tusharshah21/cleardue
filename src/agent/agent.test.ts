@@ -6,6 +6,7 @@ import { DEMO_FIXTURES } from "@/ai/demo-fixtures";
 import { proposeAction } from "@/ai/propose";
 import type { Facts } from "@/ai/prompts/propose-action";
 import { findFixture } from "@/ai/replay";
+import { noReply } from "./cases";
 import { DEFAULT_MANDATE, type Mandate } from "./mandate";
 import { parseToolkitResult } from "./toolkit";
 import { buildAgentTools, toAction, type GateContext, type GateHooks, type Proposal } from "./tools";
@@ -183,5 +184,14 @@ describe("recorded demo actions pass the mandate against the seed data", () => {
     const r = await run({ ...c, currency: "GBP" }, [steps, [{ type: "text", text: "ok" }]]);
     expect(r.recorded.map((p) => [p.toolName, p.result.verdict])).toEqual([["offer_payment_plan", "needs_approval"]]);
     expect(r.recorded[0].draft).toContain("900.00");
+  });
+});
+
+describe("noReply", () => {
+  it("labels silence as no_response, a fact rather than a guess", () => {
+    const invoice = { dueDate: new Date("2026-10-24"), status: "SENT", totalMinor: 1, paidMinor: 0 } as Parameters<typeof noReply>[0];
+    const d = noReply(invoice, new Date("2026-11-02T12:00:00Z"));
+    expect(d).toMatchObject({ reason: "no_response", confidence: 1, evidence: [] });
+    expect(d.summary).toContain("9 days overdue");
   });
 });
