@@ -228,3 +228,15 @@ describe("checkAction: money actions that always need the freelancer", () => {
     expect(checkAction({ type: "record_payment", invoiceId: "INV2-1", amountMinor: 0 }, ctx()).verdict).toBe("deny");
   });
 });
+
+describe("a misread reply fails safe", () => {
+  // The two misses in the 2026-11-03 synthetic eval: "Thanks for the update." (confidence 0.5) and
+  // "Let me check and get back to you." (0.8), both read as `forgot`, whose action is a friendly nudge.
+  it.each([0.5, 0.8])("holds a friendly nudge for approval at confidence %s even with autopilot on, outside quiet hours", (confidence) => {
+    for (const action of [message(), reminder()]) {
+      const r = checkAction(action, ctx({ confidence }));
+      expect(r.verdict).toBe("needs_approval");
+      expect(r.reasons.join(" ")).toContain(`confidence ${confidence.toFixed(2)} is below 0.85`);
+    }
+  });
+});
