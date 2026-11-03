@@ -21,10 +21,15 @@ services:
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      # Gemini through Google AI Studio's free tier. Set AI_PROVIDER=anthropic (and ANTHROPIC_API_KEY) to use Claude instead.
+      - key: AI_PROVIDER
+        value: google
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: AI_MODEL
-        sync: false
+        value: gemini-3.5-flash-lite
       # The hosted demo makes live AI calls; DEMO_MODE replay is for recording the video locally.
       - key: DEMO_MODE
         value: "false"

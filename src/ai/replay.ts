@@ -64,6 +64,66 @@ export function replayModel(fixtures: Fixture[], fallthrough: LanguageModelV4): 
   };
 }
 
+/** A rate limit (429, which Google reports as RESOURCE_EXHAUSTED) or Gemini's "high demand" overload (503 UNAVAILABLE).
+ * Both clear on their own, so they are worth one retry and then the recorded response. */
+export function isTransient(error: unknown): boolean {
+  const e = error as { statusCode?: number; message?: string } | null;
+  return e?.statusCode === 429 || e?.statusCode === 503 || /RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|rate.?limit|(429|503)/i.test(e?.message ?? "");
+}
+
+const BACKOFF_MS = 4_000;
+
+/** A spent daily quota (the free tier allows few requests a day): retrying in seconds can't help, it resets in hours. */
+export const isDailyQuota = (error: unknown) => /per day|PerDay|retry in d+h/i.test((error as { message?: string } | null)?.message ?? "");
+
+/** Seconds the provider asked us to wait, if it said (Retry-After header), capped so a request never hangs. */
+function backoffFor(error: unknown): number {
+  const headers = (error as { responseHeaders?: Record<string, string> }).responseHeaders;
+  const seconds = Number(headers?.["retry-after"]);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 10_000) : BACKOFF_MS;
+}
+
+/** Retries a rate-limited or overloaded call once after a short backoff; any other error, and a second failure, go to the caller. */
+export function retryTransient(model: LanguageModelV4, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): LanguageModelV4 {
+  const once = async <T>(call: () => PromiseLike<T>): Promise<T> => {
+    try {
+      return await call();
+    } catch (e) {
+      if (!isTransient(e) || isDailyQuota(e)) throw e;
+      await sleep(backoffFor(e));
+      return call();
+    }
+  };
+  return {
+    specificationVersion: "v4",
+    provider: model.provider,
+    modelId: model.modelId,
+    supportedUrls: model.supportedUrls,
+    doGenerate: (options) => once(() => model.doGenerate(options)),
+    doStream: (options) => once(() => model.doStream(options)),
+  };
+}
+
+/** Live first; when the live model is still rate-limited or overloaded, serves the recorded response for the seed stories (labelled
+ * as replayed). Prompts with no recording rethrow, so the task's own readable fallback takes over. */
+export function replayOnTransient(fixtures: Fixture[], live: LanguageModelV4): LanguageModelV4 {
+  return {
+    ...live,
+    specificationVersion: "v4",
+    doGenerate: async (options) => {
+      try {
+        return await live.doGenerate(options);
+      } catch (e) {
+        const content = isTransient(e) ? findFixture(fixtures, options) : null;
+        if (!content) throw e;
+        const toolCall = content.some((c) => c.type === "tool-call");
+        return { content, finishReason: { unified: toolCall ? "tool-calls" : "stop", raw: undefined }, usage, warnings: [], providerMetadata: REPLAYED };
+      }
+    },
+    doStream: (options) => live.doStream(options),
+  };
+}
+
 /** Stands in for the live model when it isn't configured, so callers hit their fallback with a readable error. */
 export function unavailableModel(reason: string): LanguageModelV4 {
   const fail = async (): Promise<never> => {

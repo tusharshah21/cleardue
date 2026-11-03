@@ -41,7 +41,7 @@ flowchart LR
     INV[Invoicing v2]
     NOT[Webhooks v1]
   end
-  LLM[Claude via AI SDK<br/>model from AI_MODEL]
+  LLM[Gemini via AI SDK<br/>provider and model from env]
 
   C -->|reply / question| UI
   C --> PAY
@@ -103,7 +103,7 @@ Pay Later lets the payer spread the cost while the merchant is paid in full, whi
 
 ## AI usage
 
-Every AI call uses the [AI SDK](https://ai-sdk.dev) with Anthropic's Claude; the model name comes from `AI_MODEL`. Prompts live in [src/ai/prompts](src/ai/prompts), and every output is parsed by a Zod schema ([src/ai/schemas.ts](src/ai/schemas.ts)) before anything uses it. Each call is capped at 20 seconds; on timeout or a bad response the task returns a readable fallback that sends the work to a human.
+Every AI call uses the [AI SDK](https://ai-sdk.dev). The hosted demo runs on Google Gemini (`gemini-3.5-flash-lite`, through the Gemini API's free tier in Google AI Studio); the provider is swappable: `AI_PROVIDER=google` (the default) or `AI_PROVIDER=anthropic` selects Google Gemini or Anthropic Claude, and the model name always comes from `AI_MODEL`. Both support the tool calling and structured output the tasks need. Prompts live in [src/ai/prompts](src/ai/prompts), and every output is parsed by a Zod schema ([src/ai/schemas.ts](src/ai/schemas.ts)) before anything uses it. Each call is capped at 20 seconds; on timeout or a bad response the task returns a readable fallback that sends the work to a human.
 
 | Task | Output | Guard in code |
 | --- | --- | --- |
@@ -113,6 +113,10 @@ Every AI call uses the [AI SDK](https://ai-sdk.dev) with Anthropic's Claude; the
 | `payerAssistant` | Answer, citations, escalate, complaint, plan request | Citations must be verbatim in the named source; any money figure not in the sources (or computed by code: total, outstanding, paid, plan options) forces an escalation |
 
 An overdue invoice with no client reply never reaches the model: code marks it `no_response` ("No reply yet").
+
+**Free tier and data use.** On Google's free tier, content sent to the model may be used by Google to improve its products. That is fine for this demo, which only handles made-up data; a production deployment would use a paid tier (where it isn't) or Claude.
+
+**Rate limits and overload.** The free tier has per-minute limits, and Gemini sometimes answers 503 "high demand". Either one is retried once after a short backoff (4 seconds, or the provider's Retry-After, capped at 10). If it still fails, a seed story gets its recorded response, labelled "Replayed response"; anything else uses the task's readable fallback that sends the work to a human.
 
 ### Evals
 
@@ -125,7 +129,9 @@ Two labelled sets, reported separately:
 npm run eval
 ```
 
-It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `ANTHROPIC_API_KEY` and `AI_MODEL`). For each set it prints overall and per-reason accuracy plus promised-date resolution and lists the misses, then writes `evals/last-run.json`. `npm run eval -- real` runs one set.
+It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `AI_MODEL` and the key for `AI_PROVIDER`). Calls are paced at one every 6 seconds (`EVAL_DELAY_MS`) to stay under the free tier's per-minute limit. For each set it prints overall and per-reason accuracy plus promised-date resolution and lists the misses, then writes `evals/last-run.json`. `npm run eval -- real` runs one set.
+
+Last live run of the synthetic set on `gemini-3.5-flash-lite`: 28 of 30 (93%), every reason at 100% except `other` (2 of 4: "Thanks for the update." and "Let me check and get back to you." were read as `forgot`, both ambiguous), and 4 of 4 promised dates resolved. The free tier allows only about 20 requests a day for some Gemini models (`gemini-3.6-flash`, `gemini-3.5-flash`), so a full run needs a model with more headroom; the runner stops early, and says so, after three AI errors in a row.
 
 ### Demo mode
 
@@ -218,7 +224,10 @@ See [.env.example](.env.example). Never commit `.env`.
 | `PAYPAL_BASE_URL` | Must be `https://api-m.sandbox.paypal.com` |
 | `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
+| `AI_PROVIDER` | `google` (default, Gemini) or `anthropic` (Claude) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini API key from Google AI Studio (free tier) |
+| `ANTHROPIC_API_KEY` | Only when `AI_PROVIDER=anthropic` |
+| `AI_MODEL` | Model name for the chosen provider, e.g. `gemini-3.5-flash-lite`; never hard-coded |
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
 | `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories daily at 03:00 UTC (hosted demo only) |

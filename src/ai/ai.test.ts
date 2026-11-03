@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import { DEMO_FIXTURES } from "./demo-fixtures";
 import { TASK_TAG as CLASSIFY } from "./prompts/classify-reply";
-import { findFixture, replayModel, unavailableModel } from "./replay";
+import { findFixture, replayModel, replayOnTransient, retryTransient, unavailableModel } from "./replay";
 import { ClassifyReplySchema, type ClassifyReply } from "./schemas";
 import { classifyReply, groundClassification, type ThreadMessage } from "./tasks";
 import { gen } from "./test-utils";
@@ -110,5 +110,70 @@ describe("DEMO_MODE replay", () => {
     });
     expect(live.doGenerateCalls).toHaveLength(1);
     expect(r.fallback).toBe(false);
+  });
+});
+
+describe("rate limits and overload (429 / RESOURCE_EXHAUSTED, 503 UNAVAILABLE)", () => {
+  const limited = () => Object.assign(new Error("RESOURCE_EXHAUSTED: quota exceeded"), { statusCode: 429 });
+  const alwaysLimited = () => new MockLanguageModelV4({ doGenerate: async () => Promise.reject(limited()) });
+  const noWait = async () => {};
+  const sawAcme = { ...input, thread: [{ from: "client" as const, at: new Date(), body: "Sorry, waiting on finance sign-off, should clear next week." }] };
+
+  it("retries once after a backoff and returns the live answer", async () => {
+    let calls = 0;
+    const live = new MockLanguageModelV4({ doGenerate: async () => (++calls === 1 ? Promise.reject(limited()) : textOf(good)) });
+    const waits: number[] = [];
+    const r = await classifyReply(retryTransient(live, async (ms) => void waits.push(ms)), input);
+    expect(calls).toBe(2);
+    expect(waits).toEqual([4000]);
+    expect(r).toEqual({ value: good, fallback: false, replayed: false });
+  });
+
+  it("honours Retry-After, capped at 10 seconds", async () => {
+    const waits: number[] = [];
+    const slow = Object.assign(limited(), { responseHeaders: { "retry-after": "60" } });
+    let calls = 0;
+    const live = new MockLanguageModelV4({ doGenerate: async () => (++calls === 1 ? Promise.reject(slow) : textOf(good)) });
+    await classifyReply(retryTransient(live, async (ms) => void waits.push(ms)), input);
+    expect(waits).toEqual([10_000]);
+  });
+
+  it("does not wait for a spent daily quota: straight to the recorded response", async () => {
+    const spent = Object.assign(new Error("Quota exceeded: requests per day limit exceeded on Free Tier. Please retry in 1h29m23s."), { statusCode: 429 });
+    const waits: number[] = [];
+    const live = retryTransient(new MockLanguageModelV4({ doGenerate: async () => Promise.reject(spent) }), async (ms) => void waits.push(ms));
+    const r = await classifyReply(replayOnTransient(DEMO_FIXTURES, live), sawAcme);
+    expect(waits).toEqual([]);
+    expect(r.replayed).toBe(true);
+  });
+
+  it("treats Gemini's 503 high-demand overload the same way", async () => {
+    const overloaded = Object.assign(new Error("This model is currently experiencing high demand."), { statusCode: 503 });
+    let calls = 0;
+    const live = new MockLanguageModelV4({ doGenerate: async () => (++calls === 1 ? Promise.reject(overloaded) : textOf(good)) });
+    const r = await classifyReply(retryTransient(live, noWait), input);
+    expect(calls).toBe(2);
+    expect(r.fallback).toBe(false);
+  });
+
+  it("does not retry other errors", async () => {
+    const live = new MockLanguageModelV4({ doGenerate: async () => Promise.reject(new Error("bad request")) });
+    await classifyReply(retryTransient(live, noWait), input);
+    expect(live.doGenerateCalls.length).toBeLessThanOrEqual(2); // structured()'s own single retry, not ours
+  });
+
+  it("serves the recorded response for a seed story when still rate-limited, labelled as replayed", async () => {
+    const live = retryTransient(alwaysLimited(), noWait);
+    const r = await classifyReply(replayOnTransient(DEMO_FIXTURES, live), sawAcme);
+    expect(r.fallback).toBe(false);
+    expect(r.replayed).toBe(true);
+    expect(r.value.reason).toBe("awaiting_approval");
+  });
+
+  it("falls back to the readable error for anything without a recording", async () => {
+    const live = retryTransient(alwaysLimited(), noWait);
+    const r = await classifyReply(replayOnTransient(DEMO_FIXTURES, live), { ...input, thread: [{ from: "client", at: new Date(), body: "Who is this?" }] });
+    expect(r.fallback).toBe(true);
+    expect(r.error).toMatch(/RESOURCE_EXHAUSTED/);
   });
 });
