@@ -1,6 +1,7 @@
 // Flow D: the client's pay page. Questions are answered from the scope, invoice and thread only; anything the
 // assistant can't ground becomes a task for the freelancer, and a complaint moves the case to dispute.
 import type { LanguageModel } from "ai";
+import { cacheScopeFor } from "@/ai/cache";
 import { getModel } from "@/ai/provider";
 import { payerAssistant, type PayerSources } from "@/ai/tasks";
 import { db } from "@/lib/db";
@@ -54,11 +55,16 @@ export async function askPayer(payToken: string, question: string, model: Langua
   if (!invoice) throw new Error("Invoice not found");
   const freelancerName = invoice.client.freelancer.name;
   const open = isOpen(invoice);
-  const { value, replayed = false } = await payerAssistant(model, { freelancerName, sources: payerSources(invoice, open ? await planOptions(invoice) : []), question });
+  const { value, replayed = false, cached = false } = await payerAssistant(model, {
+    freelancerName,
+    sources: payerSources(invoice, open ? await planOptions(invoice) : []),
+    question,
+    cacheScope: await cacheScopeFor(invoice.client.freelancer),
+  });
   let a = value;
 
   const saved = await db.payerQuestion.create({
-    data: { invoiceId: invoice.id, question, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, wantsPlan: a.wantsPlan, replayed },
+    data: { invoiceId: invoice.id, question, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, wantsPlan: a.wantsPlan, replayed, cached },
   });
   // The question joins the thread, so the agent's next diagnosis sees it too.
   await db.message.create({ data: { clientId: invoice.clientId, invoiceId: invoice.id, direction: "INBOUND", channel: "pay_page", fromAddr: invoice.client.email, body: question } });
@@ -90,5 +96,5 @@ export async function askPayer(payToken: string, question: string, model: Langua
   } else {
     await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "payer_answered", summary: `Pay-page assistant answered with ${a.citations.length} citation(s)` } });
   }
-  return { id: saved.id, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, replayed, plansAvailable };
+  return { id: saved.id, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, replayed, cached, plansAvailable };
 }

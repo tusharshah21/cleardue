@@ -37,6 +37,7 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
     citations: q.citations as ChatEntry["citations"],
     escalated: q.escalated,
     replayed: q.replayed,
+    cached: q.cached,
   }));
 
   return (

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { addLineAction, scopeCheckAction, sendDraftAction, type ScopeState } from "@/app/actions";
+import { CachedBadge } from "@/components/cached-badge";
 import { ReplayedBadge } from "@/components/replayed-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export function ScopeCheck({ projectId, currency, example }: { projectId: string
             <Badge variant={VERDICT[r.verdict].variant}>{VERDICT[r.verdict].label}</Badge>
             {r.estimatedHours != null && <span className="text-sm text-muted-foreground">about {r.estimatedHours} h of work</span>}
             {state.replayed && <ReplayedBadge />}
+            {state.cached && <CachedBadge />}
           </div>
           <p className="text-sm">{r.reasoning}</p>
           {r.quotedClauses.map((q) => (

@@ -20,7 +20,23 @@ model Freelancer {
   timezone     String
   mandate      Json // default mandate, see src/agent/mandate.ts
   clients      Client[]
+  aiCache      AiCache[]
   createdAt    DateTime  @default(now())
+}
+
+// First live result of an AI call, reused for identical inputs. Only the demo freelancer gets one (src/ai/cache.ts).
+model AiCache {
+  id           String     @id @default(cuid())
+  freelancerId String
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  key          String // hash of provider, model, seed fingerprint, task and the call's inputs
+  seed         String // fingerprint of the demo stories the entry was made under
+  task         String
+  model        String
+  output       Json
+  createdAt    DateTime   @default(now())
+
+  @@unique([freelancerId, key])
 }
 
 model Client {
@@ -115,6 +131,7 @@ model Case {
   pausedUntil  DateTime?
   promisedDate DateTime?
   replayed     Boolean          @default(false) // latest diagnosis came from DEMO_MODE replay
+  cached       Boolean          @default(false) // latest diagnosis reused a cached result from an earlier live run
   actions      ProposedAction[]
   timeline     TimelineEvent[]
   createdAt    DateTime         @default(now())
@@ -159,6 +176,7 @@ model PayerQuestion {
   escalated Boolean  @default(false)
   wantsPlan Boolean  @default(false) // the client asked to pay in parts
   replayed  Boolean  @default(false) // answer came from DEMO_MODE replay
+  cached    Boolean  @default(false) // answer reused a cached result from an earlier live run
   createdAt DateTime @default(now())
 }
 

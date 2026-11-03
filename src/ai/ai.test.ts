@@ -26,7 +26,7 @@ const input = { clientName: "Acme Labs", invoiceSummary: "$2,400 outstanding", t
 describe("classifyReply", () => {
   it("returns a validated classification, marked live", async () => {
     const r = await classifyReply(new MockLanguageModelV4({ doGenerate: textOf(good) }), input);
-    expect(r).toEqual({ value: good, fallback: false, replayed: false });
+    expect(r).toEqual({ value: good, fallback: false, replayed: false, cached: false });
   });
 
   it("marks a DEMO_MODE replay as replayed", async () => {
@@ -126,7 +126,7 @@ describe("rate limits and overload (429 / RESOURCE_EXHAUSTED, 503 UNAVAILABLE)",
     const r = await classifyReply(retryTransient(live, async (ms) => void waits.push(ms)), input);
     expect(calls).toBe(2);
     expect(waits).toEqual([4000]);
-    expect(r).toEqual({ value: good, fallback: false, replayed: false });
+    expect(r).toEqual({ value: good, fallback: false, replayed: false, cached: false });
   });
 
   it("honours Retry-After, capped at 10 seconds", async () => {

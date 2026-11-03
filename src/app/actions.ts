@@ -8,6 +8,7 @@ import { approveProposal, rejectProposal } from "@/agent/cases";
 import { MandateSchema } from "@/agent/mandate";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { cacheScopeFor } from "@/ai/cache";
 import { demoEmail, manualResetWait, resetDemo, resetViaPayPal } from "@/lib/demo-seed";
 import { getModel } from "@/ai/provider";
 import type { ScopeCheck } from "@/ai/schemas";
@@ -194,7 +195,7 @@ export async function acceptPlanAction(payToken: string, index: number): Promise
   return {};
 }
 
-export type ScopeState = FormState & { result?: ScopeCheck; request?: string; rate?: string; replayed?: boolean };
+export type ScopeState = FormState & { result?: ScopeCheck; request?: string; rate?: string; replayed?: boolean; cached?: boolean };
 
 /** Flow B: is this new request covered by the project's scope? */
 export async function scopeCheckAction(projectId: string, _: ScopeState, form: FormData): Promise<ScopeState> {
@@ -203,10 +204,10 @@ export async function scopeCheckAction(projectId: string, _: ScopeState, form: F
   if (!request) return { error: "Describe what the client is asking for." };
   const project = await db.project.findFirst({ where: { id: projectId, client: { freelancerId: freelancer.id } } });
   if (!project) return { error: "Project not found." };
-  const { value, replayed } = await scopeCheck(getModel(), { scope: project.scope, request });
+  const { value, replayed, cached } = await scopeCheck(getModel(), { scope: project.scope, request, cacheScope: await cacheScopeFor(freelancer) });
   // A rate stated in the scope ("USD 45/hour") pre-fills the line item.
   const rate = /(\d+(?:\.\d{1,2})?)\s*\/\s*h(?:ou)?r/i.exec(project.scope)?.[1];
-  return { result: value, request, rate, replayed };
+  return { result: value, request, rate, replayed, cached };
 }
 
 const LineInput = z.object({

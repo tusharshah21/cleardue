@@ -114,9 +114,13 @@ Every AI call uses the [AI SDK](https://ai-sdk.dev). The hosted demo runs on Goo
 
 An overdue invoice with no client reply never reaches the model: code marks it `no_response` ("No reply yet").
 
-**Free tier and data use.** On Google's free tier, content sent to the model may be used by Google to improve its products. That is fine for this demo, which only handles made-up data; a production deployment would use a paid tier (where it isn't) or Claude.
+**Free tier and data use.** On Google's free tier, content sent to the model may be used by Google to improve its products, and some models allow only about 20 requests a day. That is fine for building and testing a demo that only handles made-up data; production uses a paid tier (where content isn't used that way and the limits are far higher), or Claude. The hosted demo's Gemini project is moved to a paid tier before judging. One key is used; quotas are never worked around with extra keys.
 
-**Rate limits and overload.** The free tier has per-minute limits, and Gemini sometimes answers 503 "high demand". Either one is retried once after a short backoff (4 seconds, or the provider's Retry-After, capped at 10). If it still fails, a seed story gets its recorded response, labelled "Replayed response"; anything else uses the task's readable fallback that sends the work to a human.
+**Rate limits and overload.** Gemini has per-minute limits, and sometimes answers 503 "high demand". Either one is retried once after a short backoff (4 seconds, or the provider's Retry-After, capped at 10). If it still fails, a seed story gets its recorded response, labelled "Replayed response"; anything else uses the task's readable fallback that sends the work to a human.
+
+**Response cache (demo account only).** The first live result of a diagnosis, scope check or pay-page answer is stored, and an identical request later reuses it, labelled "Cached result from an earlier live run" (never passed off as a fresh call). Identical means the same model, prompt, replies, scope text, question and day, so a different reply, a new day or a changed prompt always calls the model. Only the demo freelancer has a cache, replayed and failed results are never stored, and the tool-calling step that proposes actions is not cached. Reset demo keeps cached results while the seed stories are unchanged (a fingerprint of them is part of every entry) and deletes entries made under other stories.
+
+**Misreads fail safe.** The model only proposes; code decides. A vague reply that gets read as a reason still has to clear the mandate: nothing contacts a client unless autopilot is on, the confidence is at least the client's threshold (0.85 by default) and it isn't in the client's quiet hours; money actions (cancel, record payment) always need approval; and a case in dispute stops all automation. In the eval's two ambiguous misses ("Thanks for the update.", read as `forgot` at confidence 0.5, and "Let me check and get back to you.", at 0.8), the friendly nudge would have waited in Approvals, not been sent ([mandate tests](src/agent/mandate.test.ts)).
 
 ### Evals
 
@@ -131,7 +135,7 @@ npm run eval
 
 It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `AI_MODEL` and the key for `AI_PROVIDER`). Calls are paced at one every 6 seconds (`EVAL_DELAY_MS`) to stay under the free tier's per-minute limit. For each set it prints overall and per-reason accuracy plus promised-date resolution and lists the misses, then writes `evals/last-run.json`. `npm run eval -- real` runs one set.
 
-Last live run of the synthetic set on `gemini-3.5-flash-lite`: 28 of 30 (93%), every reason at 100% except `other` (2 of 4: "Thanks for the update." and "Let me check and get back to you." were read as `forgot`, both ambiguous), and 4 of 4 promised dates resolved. The free tier allows only about 20 requests a day for some Gemini models (`gemini-3.6-flash`, `gemini-3.5-flash`), so a full run needs a model with more headroom; the runner stops early, and says so, after three AI errors in a row.
+Live runs of the synthetic set on `gemini-3.5-flash-lite` (saved in [evals/results](evals/results)): 28 of 30 (93%) on the first run, where the two misses were the ambiguous replies above, read as `forgot`. After tightening the `other` guidance in the classify prompt, 29 of 30 and then 30 of 30 on two more runs, with 4 of 4 promised dates resolved each time. The model is not deterministic: the 29 had one different miss (the prompt-injection case read as `claims_paid`, which the mandate would also have held for approval), so expect a point either way between runs. On the free tier some models allow only about 20 requests a day (`gemini-3.6-flash`, `gemini-3.5-flash`); the runner stops early, and says so, after three AI errors in a row.
 
 ### Demo mode
 

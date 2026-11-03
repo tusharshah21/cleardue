@@ -12,6 +12,7 @@ import { daysOverdue, isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
 import { ACME_EXTRA } from "@/ai/demo-fixtures";
 import { isDemoMode } from "@/ai/provider";
+import { CachedBadge } from "@/components/cached-badge";
 import { ReplayedBadge } from "@/components/replayed-badge";
 import { SimulatePaymentButton } from "@/components/simulate-payment-button";
 import { isMockMode } from "@/paypal/client";
@@ -63,6 +64,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
             {kase?.reason ? REASON_LABELS[kase.reason] ?? kase.reason : "Not diagnosed yet"}
             {kase?.confidence != null && <Badge variant="outline">confidence {kase.confidence.toFixed(2)}</Badge>}
             {kase?.replayed && <ReplayedBadge />}
+            {kase?.cached && <CachedBadge />}
             {kase && kase.state !== "open" && (
               <Badge variant={kase.state === "dispute" ? "destructive" : "secondary"}>
                 {kase.state}

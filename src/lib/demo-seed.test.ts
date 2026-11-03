@@ -25,6 +25,7 @@ vi.mock("@/lib/db", () => {
       },
       project: { create: async ({ data }: { data: Record<string, unknown> }) => row(data) },
       message: { create: async () => ({}) },
+      aiCache: { deleteMany: async ({ where }: { where: unknown }) => h.calls.push(`aiCache.deleteMany:${JSON.stringify(where)}`) },
     },
   };
 });
@@ -49,7 +50,9 @@ beforeEach(() => {
 describe("resetDemo", () => {
   it("cancels the old open PayPal invoices, then replaces only the demo freelancer's clients", async () => {
     const result = await resetDemo({ withPayPal: true });
-    expect(h.calls).toEqual(["cancel:INV2-OPEN", "client.deleteMany:f1", "send:Acme Labs", "send:Brightside Studio", "send:Koala Digital"]);
+    expect(h.calls.slice(0, 5)).toEqual(["cancel:INV2-OPEN", "client.deleteMany:f1", "send:Acme Labs", "send:Brightside Studio", "send:Koala Digital"]);
+    // Cached AI results survive the reset unless they were made under different stories.
+    expect(h.calls[5]).toMatch(/^aiCache.deleteMany:.*"NOT":{"seed":"[0-9a-f]{16}"}/);
     expect(result).toMatchObject({ freelancerId: "f1", closed: 1 });
   });
 });

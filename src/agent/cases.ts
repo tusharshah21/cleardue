@@ -1,6 +1,7 @@
 // Flow C orchestration: diagnose why an invoice is unpaid, let the agent pick gated actions, persist
 // everything to the case timeline, and run approvals from the queue.
 import type { LanguageModel } from "ai";
+import { cacheScopeFor } from "@/ai/cache";
 import type { Client, Freelancer, Invoice, Message, Prisma } from "@/generated/prisma/client";
 import { proposeAction } from "@/ai/propose";
 import type { Facts } from "@/ai/prompts/propose-action";
@@ -187,12 +188,13 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
   if (hasReply) onStage("diagnosing");
-  const classification: { value: Diagnosis; fallback: boolean; error?: string; replayed?: boolean } = hasReply
+  const classification: { value: Diagnosis; fallback: boolean; error?: string; replayed?: boolean; cached?: boolean } = hasReply
     ? await classifyReply(model, {
         clientName: invoice.client.name,
         invoiceSummary: `${formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency)} outstanding, due ${ymd(invoice.dueDate)}, ${daysOverdue(invoice, now)} days overdue`,
         thread,
         now,
+        cacheScope: await cacheScopeFor(invoice.client.freelancer),
       })
     : { value: noReply(invoice, now), fallback: false as const };
   const c = classification.value;
@@ -253,7 +255,9 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
     await timeline(invoiceId, kase.id, "agent_summary", `Agent's note: ${proposal.rationale}`);
   }
   const replayed = !!(classification.replayed || ("replayed" in proposal && proposal.replayed));
-  await db.case.update({ where: { id: kase.id }, data: { replayed } });
+  const cached = !!classification.cached;
+  await db.case.update({ where: { id: kase.id }, data: { replayed, cached } });
+  if (cached) await timeline(invoiceId, kase.id, "cached", "The diagnosis reused a cached result from an earlier live run (same reply, same day)");
   if (replayed) await timeline(invoiceId, kase.id, "replayed", "DEMO_MODE: this diagnosis used recorded AI responses (replayed, not live)");
   return kase.id;
 }

@@ -3,6 +3,7 @@
 import { DEFAULT_MANDATE } from "@/agent/mandate";
 import { isMockMode } from "@/paypal/client";
 import { cancelInvoice, deleteDraftInvoice, type LineItem } from "@/paypal/invoices";
+import { createHash } from "node:crypto";
 import { db } from "./db";
 import { createAndSendInvoice, lineTotal, newPayToken } from "./invoicing";
 
@@ -107,6 +108,9 @@ export const stories: Story[] = [
   },
 ];
 
+/** Identifies the story inputs (clients, scopes, items, threads). The AI response cache is valid only for the stories it was made under. */
+export const seedFingerprint = () => createHash("sha256").update(JSON.stringify(stories)).digest("hex").slice(0, 16);
+
 const OPEN = ["SENT", "UNPAID", "SCHEDULED"];
 
 /** Cancels (or deletes, for drafts) the demo freelancer's open PayPal invoices, so PayPal matches the fresh DB. A failure
@@ -175,6 +179,8 @@ export async function resetDemo({ withPayPal }: { withPayPal: boolean }) {
     }
     seeded.push(`${client.name}: invoice ${invoice.paypalInvoiceId ?? "(local only)"} ${invoice.status}`);
   }
+  // Cached AI results stay across a reset while the stories are unchanged; ones made under other stories are stale.
+  await db.aiCache.deleteMany({ where: { freelancerId: freelancer.id, NOT: { seed: seedFingerprint() } } });
   return { freelancerId: freelancer.id, closed, seeded };
 }
 

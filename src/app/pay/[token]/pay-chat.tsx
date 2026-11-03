@@ -13,6 +13,7 @@ export interface ChatEntry {
   citations: { source: string; quote: string }[];
   escalated: boolean;
   replayed: boolean;
+  cached?: boolean;
 }
 
 const SOURCE_LABEL: Record<string, string> = { scope: "Scope of work", invoice: "Invoice", thread: "Earlier messages" };
@@ -36,7 +37,7 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed }]);
+      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed, cached: data.cached }]);
       setQuestion("");
       if (data.plansAvailable) router.refresh(); // show the plan options the request unlocked
     } catch (e) {
@@ -64,6 +65,11 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
                 </ul>
               )}
               {e.escalated && <p className="mt-2 text-xs text-muted-foreground">Sent to {freelancerName} to answer personally.</p>}
+              {e.cached && (
+                <p className="mt-2 text-xs text-sky-700" title="An identical question was answered live earlier; that result was reused to stay within the AI quota">
+                  Cached result from an earlier live run
+                </p>
+              )}
               {e.replayed && (
                 <p className="mt-2 text-xs text-amber-700" title="DEMO_MODE served a recorded AI response instead of calling the model">
                   Replayed response (demo mode)

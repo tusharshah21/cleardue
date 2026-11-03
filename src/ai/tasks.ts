@@ -1,5 +1,6 @@
 // AI tasks. Each takes its model as a parameter (getModel() in the app, a mock in tests).
 import type { LanguageModel } from "ai";
+import type { CacheScope } from "./cache";
 import * as classifyPrompt from "./prompts/classify-reply";
 import * as payerPrompt from "./prompts/payer-assistant";
 import * as scopePrompt from "./prompts/scope-check";
@@ -24,13 +25,15 @@ export function groundClassification(c: ClassifyReply, thread: ThreadMessage[]):
 
 export async function classifyReply(
   model: LanguageModel,
-  input: { clientName: string; invoiceSummary: string; thread: ThreadMessage[]; now?: Date },
+  input: { clientName: string; invoiceSummary: string; thread: ThreadMessage[]; now?: Date; cacheScope?: CacheScope | null },
 ): Promise<StructuredResult<ClassifyReply>> {
   const today = (input.now ?? new Date()).toISOString().slice(0, 10);
   const result = await structured({
     model,
     schema: ClassifyReplySchema,
     system: classifyPrompt.system,
+    // Replies and the day (relative dates like "Friday" resolve against it), not the timestamps, which shift on every reseed.
+    cache: { scope: input.cacheScope, task: "classify_reply", parts: [classifyPrompt.system, today, input.clientName, input.invoiceSummary, input.thread.map((m) => [m.from, m.body])] },
     prompt: classifyPrompt.buildPrompt({
       today,
       clientName: input.clientName,
@@ -56,9 +59,10 @@ export function groundScopeCheck(s: ScopeCheck, scope: string): ScopeCheck {
   return { ...s, quotedClauses, verdict: "GRAY_ZONE", reasoning: `No scope clause could be verified for this verdict. ${s.reasoning}`.slice(0, 600) };
 }
 
-export async function scopeCheck(model: LanguageModel, input: { scope: string; request: string }): Promise<StructuredResult<ScopeCheck>> {
+export async function scopeCheck(model: LanguageModel, input: { scope: string; request: string; cacheScope?: CacheScope | null }): Promise<StructuredResult<ScopeCheck>> {
   const result = await structured({
     model,
+    cache: { scope: input.cacheScope, task: "scope_check", parts: [scopePrompt.system, input.scope, input.request] },
     schema: ScopeCheckSchema,
     system: scopePrompt.system,
     prompt: scopePrompt.buildPrompt(input),
@@ -107,10 +111,11 @@ export function groundAnswer(a: PayerAnswer, sources: PayerSources, freelancerNa
 
 export async function payerAssistant(
   model: LanguageModel,
-  input: { freelancerName: string; sources: PayerSources; question: string },
+  input: { freelancerName: string; sources: PayerSources; question: string; cacheScope?: CacheScope | null },
 ): Promise<StructuredResult<PayerAnswer>> {
   const result = await structured({
     model,
+    cache: { scope: input.cacheScope, task: "payer_assistant", parts: [payerPrompt.system, input.freelancerName, input.sources, input.question] },
     schema: PayerAnswerSchema,
     system: payerPrompt.system,
     prompt: payerPrompt.buildPrompt({ freelancerName: input.freelancerName, ...input.sources, question: input.question }),
