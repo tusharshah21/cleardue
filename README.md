@@ -150,7 +150,7 @@ Hosted demo: email `demo@cleardue.app`, password `judge-cleardue-2026`. This is 
 
 Locally, sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env`. When `DEMO_MODE=true` or `PAYPAL_MODE=mock`, the login page shows these credentials and fills them in. After sign-in, **Start here** walks through the three demo stories (Acme, Brightside, Koala); it can be dismissed and stays in the menu.
 
-Because judges share one account, **Reset demo** on Start here puts the three stories back at their starting point (after a confirmation). It touches only the demo freelancer's data, and with PayPal connected it first cancels the open invoices from the previous run (deleting drafts), so PayPal and the database stay consistent. With `DEMO_DAILY_RESET=true` (set in render.yaml) the sync cron does the same reset once a day. `npm run seed` / `npm run seed:paypal` run the same reset from the command line.
+Because judges share one account, **Reset demo** on Start here puts the three stories back at their starting point (after a confirmation). It touches only the demo freelancer's data, and with PayPal connected it first cancels the open invoices from the previous run (deleting drafts), so PayPal and the database stay consistent. With `DEMO_DAILY_RESET=true` (set in render.yaml) the sync cron does the same reset once a day at 03:00 UTC, and Start here shows the next one in the viewer's timezone. Reset demo works at most once every 5 minutes across all judges, so two judges can't wipe each other's run back to back. `npm run seed` / `npm run seed:paypal` run the same reset from the command line.
 
 ### Mock mode (no PayPal account needed)
 
@@ -194,12 +194,16 @@ Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`)
 
 For judges (also pasted into Devpost):
 
-1. Open the hosted demo and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox; no real money moves.
+1. Open the hosted demo and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox: every invoice and payment is fake money, and no real money moves.
+
+   To pay as the client, use the shared PayPal sandbox buyer account: email `SANDBOX_BUYER_EMAIL`, password `SANDBOX_BUYER_PASSWORD` (placeholders until the account is set up). It is a sandbox-only personal account with fake money; it works only on sandbox.paypal.com, not on real PayPal.
 2. You land on **Start here**, with three stories, each about a minute:
    - **Acme Labs, autopilot acts with no click.** Open Acme's invoice and click **Diagnose now**. The agent reads Dana's "waiting on finance sign-off" reply, then sends a PayPal reminder to Acme's AP contact and pauses reminders. Both show on the timeline as done by autopilot, within the mandate; Approvals stays empty.
    - **Brightside Studio, approval path and a payment plan.** Open Brightside's invoice and click **Diagnose now** (Sam: "cash is tight this month"). Open the pay page link and accept a two-part plan: autopilot is off for this client, so the page says Aarav will confirm. Approve it under **Approvals**; the pay page updates to two smaller PayPal invoices.
-   - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay with PayPal opens PayPal's sandbox checkout, where you sign in with a PayPal sandbox personal account (any account from your own developer.paypal.com dashboard works); the webhook marks the invoice paid and closes the case.
-3. If a story is already finished (another judge got there first), click **Reset demo** on Start here. The demo also resets itself once a day.
+   - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay with PayPal opens PayPal's sandbox checkout, where you sign in with the sandbox buyer account above (or any sandbox personal account of your own); the webhook marks the invoice paid and closes the case.
+3. If a story is already finished (another judge got there first), click **Reset demo** on Start here (at most once every 5 minutes). The demo also resets itself daily at 03:00 UTC.
+
+Acme's reminder is client contact, so the mandate holds it during the client's quiet hours (20:00 to 08:00 New York time). At night there, Start here says so: the diagnosis still runs and the reminder waits in Approvals. For autopilot acting at night, use Koala's plan, or try Acme during New York daytime.
 
 ## Environment variables
 
@@ -217,7 +221,7 @@ See [.env.example](.env.example). Never commit `.env`.
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
-| `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories once a day (hosted demo only) |
+| `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories daily at 03:00 UTC (hosted demo only) |
 | `APP_URL` | Public base URL for client pay-page links |
 | `CRON_SECRET` | Protects the polling sync endpoint |
 | `SEED_CLIENT_EMAIL`, `SEED_AP_EMAIL` | Sandbox personal account and AP inbox used by the seed |

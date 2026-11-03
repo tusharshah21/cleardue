@@ -36,7 +36,7 @@ services:
         sync: false
       - key: DEMO_PASSWORD
         sync: false
-      # Judges share the demo login: the sync cron resets the three demo stories once a day.
+      # Judges share the demo login: the sync cron resets the three demo stories daily at 03:00 UTC.
       - key: DEMO_DAILY_RESET
         value: "true"
       - key: SESSION_PASSWORD

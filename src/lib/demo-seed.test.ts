@@ -38,7 +38,7 @@ vi.mock("@/lib/invoicing", () => ({
   newPayToken: () => "tok",
 }));
 
-const { dailyDemoReset, resetDemo } = await import("./demo-seed");
+const { dailyDemoReset, manualResetWait, nextScheduledReset, resetDemo } = await import("./demo-seed");
 
 beforeEach(() => {
   h.calls = [];
@@ -62,13 +62,35 @@ describe("dailyDemoReset", () => {
     expect(h.calls).toEqual([]);
   });
 
-  it("waits a day after the last reset, then resets", async () => {
+  it("resets once the 03:00 UTC slot has passed since the last reset", async () => {
     vi.stubEnv("DEMO_DAILY_RESET", "true");
     vi.stubEnv("PAYPAL_MODE", "mock");
-    h.oldest = new Date("2026-11-03T00:00:00Z");
+    h.oldest = new Date("2026-11-03T03:00:00Z"); // already reset in today's slot
     expect(await dailyDemoReset(now)).toBe(false);
-    h.oldest = new Date("2026-11-02T11:00:00Z");
+    h.oldest = new Date("2026-11-03T02:59:00Z"); // a manual reset just before the slot doesn't count
     expect(await dailyDemoReset(now)).toBe(true);
     expect(h.calls).toContain("cancel:INV2-OPEN");
+  });
+
+  it("waits for 03:00 UTC: at 02:00 yesterday's slot still stands", async () => {
+    vi.stubEnv("DEMO_DAILY_RESET", "true");
+    h.oldest = new Date("2026-11-02T03:00:00Z");
+    expect(await dailyDemoReset(new Date("2026-11-03T02:00:00Z"))).toBe(false);
+  });
+
+  it("names the next slot", () => {
+    expect(nextScheduledReset(new Date("2026-11-03T02:00:00Z")).toISOString()).toBe("2026-11-03T03:00:00.000Z");
+    expect(nextScheduledReset(now).toISOString()).toBe("2026-11-04T03:00:00.000Z");
+  });
+});
+
+describe("manualResetWait", () => {
+  const now = new Date("2026-11-03T12:00:00Z");
+  it("allows one reset per 5 minutes", async () => {
+    expect(await manualResetWait(now)).toBe(0); // no demo data yet
+    h.oldest = new Date("2026-11-03T11:58:30Z");
+    expect(await manualResetWait(now)).toBe(4);
+    h.oldest = new Date("2026-11-03T11:55:00Z");
+    expect(await manualResetWait(now)).toBe(0);
   });
 });

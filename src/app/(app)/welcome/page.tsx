@@ -4,7 +4,10 @@ import { dismissWelcomeAction } from "@/app/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireFreelancer } from "@/lib/auth";
+import { effectiveMandate, inQuietHours } from "@/agent/mandate";
 import { db } from "@/lib/db";
+import { nextScheduledReset } from "@/lib/demo-seed";
+import { LocalTime } from "./local-time";
 import { ResetDemo } from "./reset-demo";
 
 export const metadata: Metadata = { title: "Start here" };
@@ -35,6 +38,9 @@ const STORIES = [
   },
 ] as const;
 
+const ACME_NIGHT =
+  "It's night in New York, so Aarav's mandate holds client contact until morning (quiet hours). The diagnosis still runs and the reminder waits in Approvals. Try Koala for an autopilot plan, or come back during New York daytime.";
+
 export default async function WelcomePage() {
   const freelancer = await requireFreelancer();
   const invoices = await db.invoice.findMany({
@@ -42,9 +48,14 @@ export default async function WelcomePage() {
     include: { client: true },
     orderBy: { createdAt: "asc" },
   });
+  const now = new Date();
   const stories = STORIES.flatMap((s) => {
     const invoice = invoices.find((i) => i.client.name === s.client);
-    return invoice ? [{ ...s, href: s.target === "pay" ? `/pay/${invoice.payToken}` : `/invoices/${invoice.id}` }] : [];
+    if (!invoice) return [];
+    const href = s.target === "pay" ? `/pay/${invoice.payToken}` : `/invoices/${invoice.id}`;
+    // Acme's autopilot reminder is client contact, which the mandate holds during the client's quiet hours.
+    const quiet = s.client === "Acme Labs" && inQuietHours(effectiveMandate(freelancer.mandate, invoice.client.mandate).quietHours, invoice.client.timezone, now);
+    return [quiet ? { ...s, href, title: "Quiet hours: the reminder waits", body: ACME_NIGHT } : { ...s, href }];
   });
 
   return (
@@ -79,7 +90,12 @@ export default async function WelcomePage() {
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border p-4">
-        <p className="flex-1 text-sm text-muted-foreground">Demo resets daily. Use Reset demo if a story is already finished.</p>
+        <div className="flex-1 text-sm text-muted-foreground">
+          <p>Demo resets daily. Use Reset demo if a story is already finished.</p>
+          <p className="text-xs">
+            Next automatic reset: <LocalTime iso={nextScheduledReset(now).toISOString()} />
+          </p>
+        </div>
         <ResetDemo />
       </div>
 

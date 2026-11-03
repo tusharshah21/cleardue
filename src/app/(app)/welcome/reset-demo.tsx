@@ -17,6 +17,7 @@ export function ResetDemo() {
         {pending ? "Resetting…" : "Reset demo"}
       </Button>
       {state.done && <span className="text-sm text-muted-foreground" role="status">Demo reset. All three stories are back at the start.</span>}
+      {state.notice && <span className="text-sm text-muted-foreground" role="status">{state.notice}</span>}
       {state.error && <span className="text-sm text-destructive" role="alert">{state.error}</span>}
       <dialog ref={dialog} aria-labelledby="reset-title" className="m-auto max-w-sm rounded-lg border bg-background p-6 text-foreground shadow-lg backdrop:bg-black/40">
         <form action={action} className="space-y-4">

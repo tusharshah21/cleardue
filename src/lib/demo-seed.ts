@@ -184,11 +184,33 @@ export async function lastDemoReset() {
   return oldest?.createdAt ?? null;
 }
 
-/** For the cron: resets the demo if DEMO_DAILY_RESET=true and the last reset is a day old (or there is no demo data). */
+/** The daily reset runs at 03:00 UTC, a quiet time for judges in the US, Europe and India. */
+const DAILY_RESET_HOUR_UTC = 3;
+
+/** The most recent 03:00 UTC at or before `now`. */
+function lastScheduledReset(now: Date) {
+  const at = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DAILY_RESET_HOUR_UTC));
+  return at > now ? new Date(at.getTime() - day) : at;
+}
+
+/** The next 03:00 UTC after `now`, shown on Start here. */
+export const nextScheduledReset = (now = new Date()) => new Date(lastScheduledReset(now).getTime() + day);
+
+/** For the cron (every few minutes): with DEMO_DAILY_RESET=true, resets the demo once the 03:00 UTC slot has passed
+ * and the demo hasn't been reset since (or there is no demo data). */
 export async function dailyDemoReset(now = new Date()) {
   if (process.env.DEMO_DAILY_RESET !== "true") return false;
   const last = await lastDemoReset();
-  if (last && now.getTime() - last.getTime() < day) return false;
+  if (last && last >= lastScheduledReset(now)) return false;
   await resetDemo({ withPayPal: resetViaPayPal() });
   return true;
+}
+
+const MANUAL_RESET_GAP = 5 * 60_000;
+
+/** Reset demo is limited to once per 5 minutes across all judges: minutes left to wait, or 0. */
+export async function manualResetWait(now = new Date()) {
+  const last = await lastDemoReset();
+  const left = last ? MANUAL_RESET_GAP - (now.getTime() - last.getTime()) : 0;
+  return left > 0 ? Math.ceil(left / 60_000) : 0;
 }

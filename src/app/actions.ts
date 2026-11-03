@@ -8,7 +8,7 @@ import { approveProposal, rejectProposal } from "@/agent/cases";
 import { MandateSchema } from "@/agent/mandate";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { demoEmail, resetDemo, resetViaPayPal } from "@/lib/demo-seed";
+import { demoEmail, manualResetWait, resetDemo, resetViaPayPal } from "@/lib/demo-seed";
 import { getModel } from "@/ai/provider";
 import type { ScopeCheck } from "@/ai/schemas";
 import { scopeCheck } from "@/ai/tasks";
@@ -50,9 +50,11 @@ export async function dismissWelcomeAction() {
 }
 
 /** Start here: put the three demo stories back to their starting point. Only the demo freelancer can do this. */
-export async function resetDemoAction(): Promise<FormState & { done?: boolean }> {
+export async function resetDemoAction(): Promise<FormState & { done?: boolean; notice?: string }> {
   const freelancer = await requireFreelancer();
   if (freelancer.email !== demoEmail()) return { error: "Only the demo account can be reset." };
+  const wait = await manualResetWait();
+  if (wait) return { notice: `The demo was reset a moment ago, so the stories should already be at the start. You can reset it again in ${wait} minute${wait === 1 ? "" : "s"}.` };
   try {
     await resetDemo({ withPayPal: resetViaPayPal() });
   } catch (e) {
