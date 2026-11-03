@@ -4,6 +4,8 @@ import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { MarkSentButton } from "./mark-sent-button";
 
+const MESSAGE_STATUS: Record<string, string> = { queued: "To send", sent: "Sent", failed: "Failed" };
+
 export default async function OutboxPage() {
   const freelancer = await requireFreelancer();
   const messages = await db.message.findMany({
@@ -23,10 +25,9 @@ export default async function OutboxPage() {
         <article key={m.id} className="space-y-2 rounded-lg border p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <div>
-              <span className="font-medium">{m.subject ?? "(no subject)"}</span>
+              {m.subject && <span className="font-medium">{m.subject} </span>}
               <span className="text-muted-foreground">
-                {" "}
-                to {m.toAddr ?? m.client.email} ·{" "}
+                To {m.toAddr ?? m.client.email} ·{" "}
                 {m.invoiceId ? (
                   <Link href={`/invoices/${m.invoiceId}`} className="hover:underline">
                     {m.client.name}
@@ -37,7 +38,7 @@ export default async function OutboxPage() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={m.status === "queued" ? "secondary" : "outline"}>{m.status}</Badge>
+              <Badge variant={m.status === "queued" ? "secondary" : "outline"}>{MESSAGE_STATUS[m.status ?? ""] ?? m.status}</Badge>
               {m.status === "queued" && <MarkSentButton messageId={m.id} />}
             </div>
           </div>

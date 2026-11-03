@@ -24,7 +24,7 @@ export default async function ClientsPage() {
               <CardDescription>
                 {c.email}
                 {c.approverEmail && ` · AP: ${c.approverEmail}`} · {c.country} · {c.currency} · {c.timezone} ·{" "}
-                {c._count.invoices} invoices
+                {c._count.invoices} invoice{c._count.invoices === 1 ? "" : "s"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

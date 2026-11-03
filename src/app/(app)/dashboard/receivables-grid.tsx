@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
+import { StatusBadge, invoiceStatusLabel } from "@/components/status-badge";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -33,11 +34,11 @@ const columns: ColDef<ReceivableRow>[] = [
         </Link>
       ),
   },
-  { field: "invoice", headerName: "Invoice", width: 120 },
-  { field: "status", width: 140, valueFormatter: (p) => String(p.value ?? "").replaceAll("_", " ").toLowerCase() },
-  { field: "daysOverdue", headerName: "Days overdue", width: 130, type: "numericColumn", sort: "desc", valueFormatter: (p) => (p.value > 0 ? String(p.value) : "") },
+  { field: "invoice", headerName: "Invoice", width: 100 },
+  { field: "status", width: 190, valueFormatter: (p) => invoiceStatusLabel(String(p.value ?? ""), p.data?.daysOverdue), cellRenderer: (p: ICellRendererParams<ReceivableRow>) => <StatusBadge status={String(p.value ?? "")} overdueDays={p.data?.daysOverdue} /> },
+  { field: "daysOverdue", headerName: "Days late", width: 110, filter: false, type: "numericColumn", sort: "desc", valueFormatter: (p) => (p.value > 0 ? String(p.value) : "") },
   { field: "outstanding", headerName: "Outstanding", width: 140, type: "numericColumn", valueFormatter: (p) => p.data?.outstandingText ?? "", filter: false },
-  { field: "reason", headerName: "Reason", width: 160 },
+  { field: "reason", headerName: "Reason", width: 160, valueFormatter: (p) => p.value || "Not diagnosed yet" },
   { field: "nextAction", headerName: "Next action", flex: 1.5, minWidth: 200, tooltipField: "nextAction" },
   { field: "dueDate", headerName: "Due", width: 120 },
 ];

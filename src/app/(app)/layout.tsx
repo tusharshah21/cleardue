@@ -3,6 +3,7 @@ import { logoutAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { NavLinks } from "./nav-links";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const freelancer = await requireFreelancer();
@@ -12,6 +13,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   ]);
   const pending = proposals + tasks;
   const nav = [
+    { href: "/welcome", label: "Start here" },
     { href: "/dashboard", label: "Dashboard" },
     { href: "/approvals", label: "Approvals", count: pending },
     { href: "/outbox", label: "Outbox" },
@@ -25,18 +27,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           ClearDue
         </Link>
         <p className="mt-1 text-xs text-muted-foreground">{freelancer.businessName}</p>
-        <nav className="mt-6 flex flex-wrap gap-1 md:flex-col">
-          {nav.map((n) => (
-            <Link key={n.href} href={n.href} className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted">
-              {n.label}
-              {!!n.count && (
-                <span className="rounded-full bg-primary px-2 text-xs text-primary-foreground" aria-label={`${n.count} waiting`}>
-                  {n.count}
-                </span>
-              )}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks items={nav} />
         <form action={logoutAction} className="mt-6">
           <Button variant="ghost" size="sm" type="submit">
             Sign out
