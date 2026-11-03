@@ -146,7 +146,11 @@ npm run dev                   # http://localhost:3000
 
 ### Demo login
 
-Sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env` (locally `demo@cleardue.app` and whatever password you set). When `DEMO_MODE=true` or `PAYPAL_MODE=mock`, the login page shows these credentials and fills them in, so judges on the hosted demo can sign in with one click. After sign-in, **Start here** walks through the three demo stories (Acme, Brightside, Koala); it can be dismissed and stays in the menu.
+Hosted demo: email `demo@cleardue.app`, password `judge-cleardue-2026`. This is a demo-only account shared by all judges, with sandbox PayPal only.
+
+Locally, sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env`. When `DEMO_MODE=true` or `PAYPAL_MODE=mock`, the login page shows these credentials and fills them in. After sign-in, **Start here** walks through the three demo stories (Acme, Brightside, Koala); it can be dismissed and stays in the menu.
+
+Because judges share one account, **Reset demo** on Start here puts the three stories back at their starting point (after a confirmation). It touches only the demo freelancer's data, and with PayPal connected it first cancels the open invoices from the previous run (deleting drafts), so PayPal and the database stay consistent. With `DEMO_DAILY_RESET=true` (set in render.yaml) the sync cron does the same reset once a day. `npm run seed` / `npm run seed:paypal` run the same reset from the command line.
 
 ### Mock mode (no PayPal account needed)
 
@@ -186,6 +190,17 @@ PayPal's webhook simulator sends mock events that [cannot pass verify-webhook-si
 
 Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`) re-syncs open invoices, ends expired pauses and retries pending plan sends. The Render blueprint runs it every 5 minutes, and the dashboard also triggers it after each load.
 
+## Testing instructions
+
+For judges (also pasted into Devpost):
+
+1. Open the hosted demo and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox; no real money moves.
+2. You land on **Start here**, with three stories, each about a minute:
+   - **Acme Labs, autopilot acts with no click.** Open Acme's invoice and click **Diagnose now**. The agent reads Dana's "waiting on finance sign-off" reply, then sends a PayPal reminder to Acme's AP contact and pauses reminders. Both show on the timeline as done by autopilot, within the mandate; Approvals stays empty.
+   - **Brightside Studio, approval path and a payment plan.** Open Brightside's invoice and click **Diagnose now** (Sam: "cash is tight this month"). Open the pay page link and accept a two-part plan: autopilot is off for this client, so the page says Aarav will confirm. Approve it under **Approvals**; the pay page updates to two smaller PayPal invoices.
+   - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay with PayPal opens PayPal's sandbox checkout, where you sign in with a PayPal sandbox personal account (any account from your own developer.paypal.com dashboard works); the webhook marks the invoice paid and closes the case.
+3. If a story is already finished (another judge got there first), click **Reset demo** on Start here. The demo also resets itself once a day.
+
 ## Environment variables
 
 See [.env.example](.env.example). Never commit `.env`.
@@ -201,7 +216,8 @@ See [.env.example](.env.example). Never commit `.env`.
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | Claude access; the model name is read from env |
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
-| `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters |
+| `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
+| `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories once a day (hosted demo only) |
 | `APP_URL` | Public base URL for client pay-page links |
 | `CRON_SECRET` | Protects the polling sync endpoint |
 | `SEED_CLIENT_EMAIL`, `SEED_AP_EMAIL` | Sandbox personal account and AP inbox used by the seed |
@@ -211,7 +227,7 @@ See [.env.example](.env.example). Never commit `.env`.
 1. Create a Neon Postgres database and copy its connection string.
 2. In Render, create a Blueprint from this repo; it picks up [render.yaml](render.yaml) (Starter web service and the sync cron job).
 3. Set `DATABASE_URL` and the other `sync: false` variables in the Render dashboard. Migrations run in the pre-deploy step.
-4. Seed once from your machine against Neon: `DATABASE_URL=<neon url> npm run seed:paypal`.
+4. Seed from your machine against Neon: `DATABASE_URL=<neon url> npm run seed:paypal`. Run it again after each deploy (or click **Reset demo** once signed in), so the demo starts from the three stories. It cancels the previous run's open sandbox invoices first. After that, the cron resets the demo daily.
 
 ## Tests
 

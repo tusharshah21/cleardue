@@ -5,6 +5,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { ResetDemo } from "./reset-demo";
 
 export const metadata: Metadata = { title: "Start here" };
 
@@ -76,6 +77,11 @@ export default async function WelcomePage() {
       ) : (
         <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">The demo stories aren&apos;t in this database. Run <code>npm run seed</code> to add them.</p>
       )}
+
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border p-4">
+        <p className="flex-1 text-sm text-muted-foreground">Demo resets daily. Use Reset demo if a story is already finished.</p>
+        <ResetDemo />
+      </div>
 
       <form action={dismissWelcomeAction} className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="ghost">

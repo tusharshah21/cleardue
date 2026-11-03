@@ -8,6 +8,7 @@ import { approveProposal, rejectProposal } from "@/agent/cases";
 import { MandateSchema } from "@/agent/mandate";
 import { logIn, logOut, requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { demoEmail, resetDemo, resetViaPayPal } from "@/lib/demo-seed";
 import { getModel } from "@/ai/provider";
 import type { ScopeCheck } from "@/ai/schemas";
 import { scopeCheck } from "@/ai/tasks";
@@ -46,6 +47,19 @@ const WELCOME_DISMISSED = "cleardue_welcome_dismissed";
 export async function dismissWelcomeAction() {
   (await cookies()).set(WELCOME_DISMISSED, "1", { httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 365, path: "/" });
   redirect("/dashboard");
+}
+
+/** Start here: put the three demo stories back to their starting point. Only the demo freelancer can do this. */
+export async function resetDemoAction(): Promise<FormState & { done?: boolean }> {
+  const freelancer = await requireFreelancer();
+  if (freelancer.email !== demoEmail()) return { error: "Only the demo account can be reset." };
+  try {
+    await resetDemo({ withPayPal: resetViaPayPal() });
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath("/", "layout");
+  return { done: true };
 }
 
 export async function logoutAction() {

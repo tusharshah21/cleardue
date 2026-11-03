@@ -20,7 +20,7 @@ Target length: 2:40 (hard limit 2:45; the video must stay under 3:00). Record at
 - Signed in as the demo user; the browser zoom is 100% and notifications are off.
 - Koala's sandbox payer account is logged in on a second tab for the 2:20 payment.
 - Record while it's daytime in New York (8:00 to 20:00 there, so 18:30 to 06:30 IST in November): Acme's reminder is a client contact, and outside those hours quiet hours send it to Approvals instead of running it.
-- Run the whole flow once off camera; reseed before the real take.
+- Run the whole flow once off camera, then click **Reset demo** on Start here (or `npm run seed:paypal`) before the real take.
 
 ## Source for the opening line
 
