@@ -64,20 +64,23 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
             <TableBody>
               {items.map((i, n) => (
                 <TableRow key={n}>
-                  <TableCell>
+                  {/* Quantity sits under the name, so two columns fit a 375px phone. */}
+                  <TableCell className="whitespace-normal">
                     <p className="font-medium">{i.name}</p>
                     {i.description && <p className="text-xs text-muted-foreground">{i.description}</p>}
+                    {(i.unit === "HOURS" || i.quantity !== 1) && (
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {i.unit === "HOURS" ? `${i.quantity} h × ${formatMoney(i.unitAmountMinor, invoice.currency)}` : `× ${i.quantity}`}
+                      </p>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground tabular-nums">
-                    {i.unit === "HOURS" ? `${i.quantity} h × ${formatMoney(i.unitAmountMinor, invoice.currency)}` : i.quantity !== 1 ? `× ${i.quantity}` : ""}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(Math.round(i.quantity * i.unitAmountMinor), invoice.currency)}</TableCell>
+                  <TableCell className="text-right align-top tabular-nums">{formatMoney(Math.round(i.quantity * i.unitAmountMinor), invoice.currency)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={2}>Total</TableCell>
+                <TableCell>Total</TableCell>
                 <TableCell className="text-right tabular-nums">{formatMoney(invoice.totalMinor, invoice.currency)}</TableCell>
               </TableRow>
             </TableFooter>
