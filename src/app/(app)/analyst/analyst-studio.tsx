@@ -1,28 +1,73 @@
 "use client";
 
-// SPIKE (spike/ag-studio): AG Studio with one custom agent ("Collections analyst") whose custom tool calls a
-// ClearDue endpoint and renders the result in Studio as a grid widget. No widgets, theming or polish yet.
-import { useMemo, useState } from "react";
-import { AgStudioAiModule, clientToolRunner, createAiHarness, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
-import { AgStudio, AgStudioProvider } from "ag-studio-react";
-
-interface Row {
-  client: string;
-  invoice: string;
-  currency: string;
-  outstanding: number;
-  daysOverdue: number;
-  reason: string;
-}
+// The collections analyst dashboard: AG Studio with ClearDue's three custom widgets, a theme matching the rest of the
+// app, a default report, and the analyst agent (a Client Tool Runner whose server side is /api/analyst/run).
+import { useMemo } from "react";
+import { AgStudioAiModule, clientToolRunner, createAiHarness, studioTheme, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
+import { AgStudio, AgStudioProvider, createWidgets } from "ag-studio-react";
+import type { DecisionRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
+import { CUSTOM_WIDGETS } from "./widgets";
 
 const PAGE = "analyst";
-const initialState: AgReportState = { selectedPageId: PAGE, pages: [{ id: PAGE, widgets: {}, widgetLayout: {} }] };
+
+/** Our shadcn tokens (neutral palette, system font, 12px corners) as Studio theme parameters. */
+const theme = studioTheme.withParams({
+  fontFamily: "inherit",
+  backgroundColor: "#ffffff",
+  textColor: "#0a0a0a",
+  borderColor: "#e5e5e5",
+  studioCanvasBackgroundColor: "#fafafa",
+  studioAiPanelWidth: 320,
+  studioPanelWidth: 230,
+  studioCanvasFontFamily: "inherit",
+  studioWidgetBackgroundColor: "#ffffff",
+  studioWidgetBorder: [1, "#e5e5e5"],
+  studioWidgetBorderRadius: 12,
+  studioWidgetPadding: 0,
+  studioWidgetTitleFontFamily: "inherit",
+  studioWidgetTitleFontSize: 15,
+  studioWidgetTitleFontWeight: 600,
+  studioWidgetTitleTextColor: "#0a0a0a",
+  studioWidgetSubtitleFontFamily: "inherit",
+  studioWidgetSubtitleTextColor: "#737373",
+  studioToggleButtonActiveBackgroundColor: "#171717",
+  studioToggleButtonActiveBorderColor: "#171717",
+  studioToggleButtonActiveColor: "#ffffff",
+  chartFontFamily: "inherit",
+  chartTextColor: "#0a0a0a",
+  chartSubtleTextColor: "#737373",
+} as never);
+
+const widgets = createWidgets({ additionalTypes: CUSTOM_WIDGETS as never, menu: [{ label: "ClearDue", widgetIds: ["owes", "decisions", "plans"] as never }, { label: "Standard", widgetIds: ["grid", "value", "bar-chart-grouped", "pie-chart", "list-filter"] as never }], defaultType: "grid" } as never);
+
+const fieldsOf = (source: string, names: string[]) => names.map((n) => ({ id: `${source}.${n}` }));
+const title = (text: string, subtitle: string) => ({ title: { enabled: true, text }, subtitle: { enabled: true, text: subtitle } });
+
+/** The report Studio opens with: the three ClearDue widgets, laid out on the 24-column canvas. */
+const initialState = {
+  selectedPageId: PAGE,
+  pages: [
+    {
+      id: PAGE,
+      widgets: {
+        owes: { type: "owes", dataMapping: { fields: fieldsOf("receivables", ["client", "invoice", "currency", "outstanding", "daysOverdue", "reason", "nextAction"]) }, format: title("Who still owes what", "Open invoices, most overdue first") },
+        decisions: { type: "decisions", dataMapping: { fields: fieldsOf("decisions", ["client", "action", "verdict", "outcome", "reasons", "date"]) }, format: title("Mandate decisions", "The model proposes, the mandate decides") },
+        plans: { type: "plans", dataMapping: { fields: fieldsOf("plans", ["client", "plan", "strategy", "part", "amount", "currency", "due", "status", "paid"]) }, format: title("Plan tracker", "Instalments paid and still to pay") },
+      },
+      widgetLayout: {
+        owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 14 },
+        decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 16 },
+        plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 16 },
+      },
+    },
+  ],
+} as unknown as AgReportState;
 
 /** POSTs the run input to our server and yields its NDJSON lines as AG-UI events. */
 async function* serverRun(input: AgAiRunInput, signal?: AbortSignal): AsyncGenerator<AgAiEvent> {
   const res = await fetch("/api/analyst/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal });
   if (!res.ok || !res.body) {
-    yield { type: "RUN_ERROR", message: `ClearDue analyst returned ${res.status}` };
+    yield { type: "RUN_ERROR", message: res.status === 429 ? "Too many questions, wait a minute." : `ClearDue analyst returned ${res.status}` };
     return;
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -37,91 +82,92 @@ async function* serverRun(input: AgAiRunInput, signal?: AbortSignal): AsyncGener
   }
 }
 
-/** Adds (or replaces) a grid of the receivables source on the analyst page. */
-function showGrid(api: AgStudioApi) {
-  const state = api.getState();
-  const pages = state.pages.map((p) =>
-    p.id !== PAGE
-      ? p
-      : {
-          ...p,
-          widgets: {
-            ...p.widgets,
-            receivables: {
-              type: "grid",
-              dataMapping: { cols: ["client", "invoice", "currency", "reason", "daysOverdue"].map((f) => ({ id: `receivables.${f}` })).concat([{ id: "receivables.outstanding", aggregation: "sum" } as never]) },
-              sort: [{ field: { id: "receivables.daysOverdue" }, direction: "desc" }],
-              format: { title: { enabled: true, text: "Open invoices from ClearDue (via the analyst's tool)" } },
-            },
-          },
-          widgetLayout: { ...p.widgetLayout, receivables: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 16 } },
-        },
-  );
-  api.setState({ ...state, pages } as AgReportState);
-}
+const text = "textFormat";
+const int = "integerFormat";
+const dec = "decimalFormat";
 
-export function AnalystStudio() {
-  const [rows, setRows] = useState<Row[]>([]);
+export function AnalystStudio({ receivables, decisions, plans }: { receivables: ReceivableRow[]; decisions: DecisionRow[]; plans: PlanPartRow[] }) {
   const data = useMemo<AgDataSourcesDefinition>(
-    () => ({
-      sources: [
-        {
-          id: "receivables",
-          description: "ClearDue open invoices, loaded by the analyst's get_receivables tool.",
-          data: rows,
-          fields: [
-            { id: "client", name: "Client", format: "textFormat" },
-            { id: "invoice", name: "Invoice", format: "textFormat" },
-            { id: "currency", name: "Currency", format: "textFormat" },
-            { id: "reason", name: "Diagnosed reason", format: "textFormat" },
-            { id: "daysOverdue", name: "Days overdue", format: "integerFormat" },
-            { id: "outstanding", name: "Outstanding", format: "decimalFormat" },
-          ],
-        },
-      ],
-    }),
-    [rows],
+    () =>
+      ({
+        sources: [
+          {
+            id: "receivables",
+            description: "Open invoices with the diagnosed reason and the next action.",
+            data: receivables,
+            fields: [
+              { id: "client", name: "Client", format: text },
+              { id: "invoice", name: "Invoice", format: text },
+              { id: "currency", name: "Currency", format: text },
+              { id: "outstanding", name: "Outstanding", format: dec },
+              { id: "daysOverdue", name: "Days overdue", format: int },
+              { id: "status", name: "Status", format: text },
+              { id: "reason", name: "Diagnosed reason", format: text },
+              { id: "nextAction", name: "Next action", format: text },
+            ],
+          },
+          {
+            id: "decisions",
+            description: "Agent proposals and what the mandate decided about each.",
+            data: decisions,
+            fields: [
+              { id: "client", name: "Client", format: text },
+              { id: "action", name: "Action", format: text },
+              { id: "verdict", name: "Mandate verdict", format: text },
+              { id: "outcome", name: "Outcome", format: text },
+              { id: "reasons", name: "Reasons", format: text },
+              { id: "date", name: "Date", format: text },
+            ],
+          },
+          {
+            id: "plans",
+            description: "Payment plan instalments and whether each is paid.",
+            data: plans,
+            fields: [
+              { id: "client", name: "Client", format: text },
+              { id: "plan", name: "Plan", format: text },
+              { id: "strategy", name: "Strategy", format: text },
+              { id: "part", name: "Part", format: text },
+              { id: "currency", name: "Currency", format: text },
+              { id: "amount", name: "Amount", format: dec },
+              { id: "due", name: "Due", format: text },
+              { id: "status", name: "Status", format: text },
+              { id: "paid", name: "Paid", format: int },
+            ],
+          },
+        ],
+      }) as unknown as AgDataSourcesDefinition,
+    [receivables, decisions, plans],
   );
 
   const ai = useMemo(
     () =>
       ({ api }: { api: AgStudioApi }) => {
-        const getReceivables = api.defineAiTool({
-          name: "get_receivables",
-          description: "Fetch ClearDue's open invoices (client, amount outstanding, days overdue, diagnosed reason) and show them on the page.",
-          params: (s) => s.object({}),
-          execute: async (_args: unknown, ctx) => {
-            const res = await fetch("/api/analyst/receivables", { signal: ctx.signal });
-            if (!res.ok) return ctx.error(`ClearDue returned ${res.status}`);
-            const fetched = (await res.json()) as Row[];
-            setRows(fetched);
-            // Let React pass the new data to Studio before the widget that reads it is added.
-            await new Promise((r) => setTimeout(r, 0));
-            showGrid(api);
-            return ctx.success(`${fetched.length} open invoices`, fetched);
-          },
-        });
         const analyst = clientToolRunner({
           id: "analyst",
           name: "Collections analyst",
-          description: "Answers questions about ClearDue receivables.",
+          description: "Answers questions about ClearDue receivables, the mandate's decisions and payment plans, and proposes actions for the freelancer to approve.",
           instructions: () => "You are ClearDue's collections analyst.",
-          tools: () => [getReceivables],
+          tools: () => [],
           run: (input, ctx) => serverRun(input, ctx.signal),
         });
         return createAiHarness(api, () => ({
           agents: [analyst],
           primary: "analyst",
-          promptStarters: [{ label: "Who owes me money?", prompt: "Who owes me money?" }],
+          promptStarters: [
+            { label: "Who owes me money?", prompt: "Who owes me money, and what should I do first?" },
+            { label: "How did the mandate decide?", prompt: "How many of the agent's proposals did the mandate allow, hold for approval or block?" },
+            { label: "Chase the most overdue", prompt: "Draft a friendly nudge for the most overdue invoice and propose it for my approval." },
+          ],
         }));
       },
     [],
   );
 
   return (
-    <div className="h-[80vh] min-h-[600px]">
+    <div className="h-[calc(100vh-9rem)] min-h-[640px]">
       <AgStudioProvider modules={[AgStudioAiModule]}>
-        <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" data={data} initialState={initialState} ai={ai} />
+        <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" panels={{ edit: { left: ["ai"], right: ["edit"] } } as never} data={data} initialState={initialState} widgets={widgets as never} theme={theme as never} ai={ai} />
       </AgStudioProvider>
     </div>
   );
