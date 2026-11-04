@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadPayInvoice } from "@/agent/payer";
 import { StatusBadge } from "@/components/status-badge";
@@ -18,6 +17,7 @@ import { AutoRefresh, PlanOption } from "./plan-options";
 export const metadata: Metadata = { title: "Invoice", robots: { index: false } };
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
+const isPaid = (status: string) => status === "PAID" || status === "MARKED_AS_PAID";
 
 // Public page for the client. The unguessable pay token in the URL is the only credential.
 export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
@@ -107,17 +107,30 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
         <Card>
           <CardHeader>
             <CardTitle>Your payment plan</CardTitle>
-            <CardDescription>{plan.state === "pending_send" ? "Some invoices are still being sent." : "Each part is its own PayPal invoice."}</CardDescription>
+            <CardDescription>
+              {plan.invoices.filter((p) => isPaid(p.status)).length} of {plan.invoices.length} parts paid.{" "}
+              {plan.state === "pending_send" ? "Some invoices are still being sent." : "Each part is its own PayPal invoice; pay them here whenever each is due."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {plan.invoices.map((p, n) => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-                <span>
-                  Part {n + 1}: {formatMoney(p.totalMinor, p.currency)} by {ymd(p.dueDate)}
-                </span>
-                <Link href={`/pay/${p.payToken}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
-                  {p.status === "PAID" ? "Paid" : "View and pay"}
-                </Link>
+              <div key={p.id} className="space-y-2 rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    Part {n + 1} of {plan.invoices.length}: {formatMoney(p.totalMinor, p.currency)}
+                  </span>
+                  <StatusBadge status={p.status} overdueDays={isOpen(p) ? daysOverdue(p) : 0} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">{isPaid(p.status) ? "Paid, thank you." : `Due ${ymd(p.dueDate)}`}</span>
+                  {isPaid(p.status) ? null : isOpen(p) && p.payerViewUrl ? (
+                    <a href={p.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "sm" })}>
+                      Pay with PayPal
+                    </a>
+                  ) : isOpen(p) ? (
+                    <span className="text-xs text-muted-foreground">Being sent, ready in a moment</span>
+                  ) : null}
+                </div>
               </div>
             ))}
           </CardContent>
