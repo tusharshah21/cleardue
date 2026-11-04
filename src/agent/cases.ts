@@ -1,6 +1,7 @@
 // Flow C orchestration: diagnose why an invoice is unpaid, let the agent pick gated actions, persist
 // everything to the case timeline, and run approvals from the queue.
 import type { LanguageModel } from "ai";
+import { appUrl } from "@/lib/app-url";
 import { cacheScopeFor } from "@/ai/cache";
 import type { Client, Freelancer, Invoice, Message, Prisma } from "@/generated/prisma/client";
 import { proposeAction } from "@/ai/propose";
@@ -36,7 +37,7 @@ async function loadInvoice(invoiceId: string, freelancerId: string): Promise<Ful
 const toThread = (messages: Message[]): ThreadMessage[] =>
   messages.map((m) => ({ from: m.direction === "INBOUND" ? "client" : "freelancer", at: m.sentAt, body: m.body }));
 
-const payLink = (invoice: Invoice) => `${process.env.APP_URL ?? "http://localhost:3000"}/pay/${invoice.payToken}`;
+const payLink = (invoice: Invoice) => `${appUrl()}/pay/${invoice.payToken}`;
 
 async function timeline(invoiceId: string, caseId: string | null, kind: string, summary: string, data?: unknown) {
   await db.timelineEvent.create({ data: { invoiceId, caseId, kind, summary, ...(data !== undefined && { data: json(data) }) } });

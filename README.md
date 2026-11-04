@@ -237,7 +237,7 @@ See [.env.example](.env.example). Never commit `.env`.
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
 | `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories daily at 03:00 UTC (hosted demo only) |
-| `APP_URL` | Public base URL for client pay-page links |
+| `APP_URL` | Optional override of the public base URL used in pay-page links; defaults to Render's `RENDER_EXTERNAL_URL`, then localhost |
 | `CRON_SECRET` | Protects the polling sync endpoint |
 | `SEED_CLIENT_EMAIL`, `SEED_AP_EMAIL` | Sandbox personal account and AP inbox used by the seed |
 

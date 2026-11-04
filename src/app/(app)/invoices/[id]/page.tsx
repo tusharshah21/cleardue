@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { appUrl } from "@/lib/app-url";
 import { ProposalCard } from "@/components/proposal-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
   const evidence = (kase?.evidence as string[] | null) ?? [];
   const open = isOpen(invoice);
   const items = invoice.items as unknown as LineItem[];
-  const payLink = `${process.env.APP_URL ?? ""}/pay/${invoice.payToken}`;
+  const payLink = `${appUrl()}/pay/${invoice.payToken}`;
 
   return (
     <div className="max-w-4xl space-y-6">

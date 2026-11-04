@@ -46,8 +46,8 @@ services:
         value: "true"
       - key: SESSION_PASSWORD
         generateValue: true
-      - key: APP_URL
-        sync: false
+      # The public URL is RENDER_EXTERNAL_URL, which Render sets itself; APP_URL is only an optional override
+      # (for a custom domain), so a fresh blueprint apply needs no variable to exist first.
       - key: CRON_SECRET
         generateValue: true
   # Polling fallback: re-syncs open invoices every 5 minutes (webhooks can be late or missing).
@@ -56,15 +56,16 @@ services:
     runtime: node
     schedule: "*/5 * * * *"
     buildCommand: "true"
-    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/sync"'
+    # Calls the web service over Render's private network (WEB_HOSTPORT is "cleardue:10000"), so it needs no public URL.
+    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "http://$WEB_HOSTPORT/api/sync"'
     envVars:
       - key: CRON_SECRET
         fromService:
           type: web
           name: cleardue
           envVarKey: CRON_SECRET
-      - key: APP_URL
+      - key: WEB_HOSTPORT
         fromService:
           type: web
           name: cleardue
-          envVarKey: APP_URL
+          property: hostport

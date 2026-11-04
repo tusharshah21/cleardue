@@ -2,6 +2,7 @@
 // tools, which are routed through src/paypal in this mode) works locally without sandbox credentials.
 // State lives in a JSON file so the seed script and the dev server share it. Dev and tests only.
 import { randomBytes } from "node:crypto";
+import { appUrl } from "@/lib/app-url";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 interface Money {
@@ -133,7 +134,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     case "send": {
       if (inv.status !== "DRAFT") return badStatus(inv, "send");
       inv.status = "SENT";
-      const href = `${process.env.APP_URL || "http://localhost:3000"}/dev/paypal/${inv.id}`;
+      const href = `${appUrl()}/dev/paypal/${inv.id}`;
       inv.detail.metadata.recipient_view_url = href;
       return done({ status: 200, body: { rel: "payer-view", href, method: "GET" } });
     }
