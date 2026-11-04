@@ -23,9 +23,9 @@ const DAY = 86_400_000;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const json = (v: unknown) => JSON.parse(JSON.stringify(v ?? null)) as Prisma.InputJsonValue;
 
-type FullInvoice = Invoice & { client: Client & { freelancer: Freelancer }; messages: Message[] };
+export type FullInvoice = Invoice & { client: Client & { freelancer: Freelancer }; messages: Message[] };
 
-async function loadInvoice(invoiceId: string, freelancerId: string): Promise<FullInvoice> {
+export async function loadInvoice(invoiceId: string, freelancerId: string): Promise<FullInvoice> {
   const invoice = await db.invoice.findFirst({
     where: { id: invoiceId, client: { freelancerId } },
     include: { client: { include: { freelancer: true } }, messages: { orderBy: { sentAt: "asc" } } },
@@ -39,11 +39,11 @@ const toThread = (messages: Message[]): ThreadMessage[] =>
 
 const payLink = (invoice: Invoice) => `${appUrl()}/pay/${invoice.payToken}`;
 
-async function timeline(invoiceId: string, caseId: string | null, kind: string, summary: string, data?: unknown) {
+export async function timeline(invoiceId: string, caseId: string | null, kind: string, summary: string, data?: unknown) {
   await db.timelineEvent.create({ data: { invoiceId, caseId, kind, summary, ...(data !== undefined && { data: json(data) }) } });
 }
 
-function gateContext(invoice: FullInvoice, c: { state: string; confidence: number | null }, now: Date): GateContext {
+export function gateContext(invoice: FullInvoice, c: { state: string; confidence: number | null }, now: Date): GateContext {
   const { client } = invoice;
   const mandate: MandateContext = {
     mandate: effectiveMandate(client.freelancer.mandate, client.mandate),

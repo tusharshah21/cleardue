@@ -45,6 +45,9 @@ services:
       - key: SHOW_DEMO_LOGIN
         value: "true"
       # Sandbox personal (buyer) account that receives the demo invoices, so a real checkout can pay them.
+      # AG Studio licence key for /analyst (client-side by design; set in the dashboard).
+      - key: AG_STUDIO
+        sync: false
       - key: SEED_CLIENT_EMAIL
         sync: false
       # Judges share the demo login: the sync cron resets the three demo stories daily at 03:00 UTC.

@@ -65,6 +65,19 @@ flowchart LR
 
 **LLM proposes, deterministic TypeScript validates.** The model never calls PayPal directly. Every tool call goes through `gate()` in [src/agent/tools.ts](src/agent/tools.ts), which turns it into an `AgentAction` and runs `checkAction()` from [src/agent/mandate.ts](src/agent/mandate.ts) against the freelancer's mandate for that client: autopilot, never auto-contact, minimum confidence, tone ceiling, maximum instalments, minimum first payment, latest final date and quiet hours in the client's time zone. The result is `allow` (runs now), `needs_approval` (queued on Approvals with the draft editable) or `deny` (recorded with reasons, never run). The mandate module has 100% statement and branch coverage (`npm run test:mandate`).
 
+## Collections analyst (AG Studio)
+
+![The /analyst page: the AI Assistant on the left, and three custom widgets (who still owes what, mandate decisions, plan tracker) on the report](docs/screenshots/38-analyst-dashboard.jpg)
+
+`/analyst` is an [AG Studio](https://www.ag-grid.com/studio/) dashboard for the freelancer, built on the Studio Agent Framework:
+
+- **Three custom widgets** ([widgets.tsx](src/app/(app)/analyst/widgets.tsx)): *Who still owes what* (open invoices, most overdue first, with the diagnosed reason and next action), *Mandate decisions* (how many proposals the mandate allowed, held for approval or blocked, with reasons) and *Plan tracker* (each payment plan's instalments and progress). They are registered with `createWidgets`, so they take part in Studio's filters, editor and AI like the built-in widgets.
+- **Theme and report:** a Studio theme mapped to the app's colours and type, and a default report with the three widgets. The data sources are read server-side for the signed-in freelancer.
+- **A custom agent on a swapped-in harness:** the collections analyst is a Client Tool Runner ([analyst-studio.tsx](src/app/(app)/analyst/analyst-studio.tsx)) whose server side ([route.ts](src/app/api/analyst/run/route.ts)) runs the app's model (Gemini or Claude) in a tool loop over read tools (receivables, decisions, plans) and four propose tools. Studio's AI panel is the front end, and our own server is the harness: we don't use Studio's built-in agents or their LLM adapter. That is the "custom agent / swapped-in harness" option the AG Grid prize describes, and it keeps the model, its key and the mandate gate on the server, never in the browser.
+- **Its proposals go through the mandate and always to Approvals.** The same check as the diagnosis agent runs, but the analyst can never auto-run anything: an action the mandate would allow is downgraded to "needs your approval", and a mandate denial stays a denial ([analyst.ts](src/agent/analyst.ts), [tests](src/agent/analyst.test.ts)). Approving a proposal checks the mandate again.
+
+On a phone the report comes first, with the three widgets stacked and the AI panel opened by "Ask the analyst"; empty widgets say what to do next. AG Studio is a commercial component. The hackathon trial key goes in `AG_STUDIO`, never in the repo; without it Studio shows a trial watermark and logs a licence notice.
+
 ## PayPal APIs used
 
 All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other host.
@@ -238,6 +251,7 @@ See [.env.example](.env.example). Never commit `.env`.
 | `AI_MODEL` | Model name for the chosen provider, e.g. `gemini-3.5-flash-lite`; never hard-coded |
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
+| `AG_STUDIO` | AG Studio licence key for `/analyst`. A client-side key, read server-side and given only to that page (never `NEXT_PUBLIC_`, never logged). Without it Studio shows a trial watermark |
 | `SHOW_DEMO_LOGIN` | `true` shows the demo login on the login page even when `DEMO_MODE` is off (the hosted demo; the credentials are public in this README) |
 | `DEMO_DAILY_RESET` | `true` makes the sync cron reset the demo stories daily at 03:00 UTC (hosted demo only) |
 | `APP_URL` | Optional override of the public base URL used in pay-page links; defaults to Render's `RENDER_EXTERNAL_URL`, then localhost |
