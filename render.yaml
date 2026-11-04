@@ -21,15 +21,22 @@ services:
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_WEBHOOK_ID
         sync: false
-      # Gemini through Google AI Studio's free tier. Set AI_PROVIDER=anthropic (and ANTHROPIC_API_KEY) to use Claude instead.
+      # AI: OpenAI gpt-5.4-mini is the primary; Gemini takes over (once, per request) on a quota error, a 5xx or a missing
+      # OpenAI key, and recorded responses come after that. ANTHROPIC_API_KEY is only needed if AI_PROVIDER=anthropic.
       - key: AI_PROVIDER
+        value: openai
+      - key: AI_MODEL
+        value: gpt-5.4-mini
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AI_FALLBACK_PROVIDER
         value: google
+      - key: AI_FALLBACK_MODEL
+        value: gemini-3.5-flash-lite
       - key: GOOGLE_GENERATIVE_AI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: AI_MODEL
-        value: gemini-3.5-flash-lite
       # The hosted demo makes live AI calls; DEMO_MODE replay is for recording the video locally.
       - key: DEMO_MODE
         value: "false"

@@ -189,7 +189,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
   if (hasReply) onStage("diagnosing");
-  const classification: { value: Diagnosis; fallback: boolean; error?: string; replayed?: boolean; cached?: boolean } = hasReply
+  const classification: { value: Diagnosis; fallback: boolean; error?: string; replayed?: boolean; cached?: boolean; provider?: string } = hasReply
     ? await classifyReply(model, {
         clientName: invoice.client.name,
         invoiceSummary: `${formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency)} outstanding, due ${ymd(invoice.dueDate)}, ${daysOverdue(invoice, now)} days overdue`,
@@ -257,7 +257,9 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   }
   const replayed = !!(classification.replayed || ("replayed" in proposal && proposal.replayed));
   const cached = !!classification.cached;
-  await db.case.update({ where: { id: kase.id }, data: { replayed, cached } });
+  // Who answered: the provider that produced the diagnosis, or the one that proposed the actions if the diagnosis was cached.
+  const provider = replayed ? null : (classification.provider ?? ("provider" in proposal ? proposal.provider : undefined) ?? null);
+  await db.case.update({ where: { id: kase.id }, data: { replayed, cached, provider } });
   if (cached) await timeline(invoiceId, kase.id, "cached", "The diagnosis reused a cached result from an earlier live run (same reply, same day)");
   if (replayed) await timeline(invoiceId, kase.id, "replayed", "This diagnosis used recorded AI responses (replayed, not live)");
   return kase.id;

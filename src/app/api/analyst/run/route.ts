@@ -1,6 +1,8 @@
 import { isStepCount, streamText } from "ai";
 import type { AgAiEvent, AgAiRunInput } from "ag-studio";
 import { getModel } from "@/ai/provider";
+import { providerOf } from "@/ai/replay";
+import { providerName } from "@/lib/provider-name";
 import { analystTools } from "@/agent/analyst";
 import { requireFreelancer } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
@@ -47,6 +49,9 @@ export async function POST(req: Request) {
             throw part.error instanceof Error ? part.error : new Error(String(part.error));
           }
         }
+        // Say which provider actually produced the answer (after any failover); recorded answers carry no provider.
+        const provider = open ? providerOf(await result.steps) : undefined;
+        if (provider) send({ type: "TEXT_MESSAGE_CONTENT", messageId: id, delta: `\n\n(Answered by ${providerName(provider)})` });
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });
       } catch (e) {
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });

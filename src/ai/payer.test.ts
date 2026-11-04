@@ -34,7 +34,7 @@ const koala = {
 const sources = payerSources(koala);
 const ask = (model: Parameters<typeof payerAssistant>[0], question: string) => payerAssistant(model, { freelancerName: "Aarav Mehta", sources, question });
 const says = (a: Partial<PayerAnswer>) =>
-  new MockLanguageModelV4({ doGenerate: gen([{ type: "text", text: JSON.stringify({ citations: [], escalate: false, escalationReason: null, complaint: false, ...a }) }]) });
+  new MockLanguageModelV4({ doGenerate: gen([{ type: "text", text: JSON.stringify({ citations: [], escalate: false, escalationReason: null, complaint: false, wantsPlan: false, ...a }) }]) });
 
 describe("payerAssistant", () => {
   it("answers the demo question from the scope and invoice, with verified citations", async () => {

@@ -55,7 +55,7 @@ export async function askPayer(payToken: string, question: string, model: Langua
   if (!invoice) throw new Error("Invoice not found");
   const freelancerName = invoice.client.freelancer.name;
   const open = isOpen(invoice);
-  const { value, replayed = false, cached = false } = await payerAssistant(model, {
+  const { value, replayed = false, cached = false, provider = null } = await payerAssistant(model, {
     freelancerName,
     sources: payerSources(invoice, open ? await planOptions(invoice) : []),
     question,
@@ -64,7 +64,7 @@ export async function askPayer(payToken: string, question: string, model: Langua
   let a = value;
 
   const saved = await db.payerQuestion.create({
-    data: { invoiceId: invoice.id, question, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, wantsPlan: a.wantsPlan, replayed, cached },
+    data: { invoiceId: invoice.id, question, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, wantsPlan: a.wantsPlan, replayed, cached, provider },
   });
   // The question joins the thread, so the agent's next diagnosis sees it too.
   await db.message.create({ data: { clientId: invoice.clientId, invoiceId: invoice.id, direction: "INBOUND", channel: "pay_page", fromAddr: invoice.client.email, body: question } });
@@ -96,5 +96,5 @@ export async function askPayer(payToken: string, question: string, model: Langua
   } else {
     await db.timelineEvent.create({ data: { invoiceId: invoice.id, kind: "payer_answered", summary: `Pay-page assistant answered with ${a.citations.length} citation(s)` } });
   }
-  return { id: saved.id, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, replayed, cached, plansAvailable };
+  return { id: saved.id, answer: a.answer, citations: a.citations, escalated: a.escalate || a.complaint, replayed, cached, provider, plansAvailable };
 }

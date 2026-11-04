@@ -1,0 +1,307 @@
+{
+  "provider": "openai",
+  "model": "gpt-5.4-nano",
+  "ranAt": "2026-11-04T11:26:06.109Z",
+  "synthetic": {
+    "total": 30,
+    "correct": 30,
+    "fallbacks": 0,
+    "perReason": [
+      {
+        "reason": "forgot",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "awaiting_approval",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "cash_constraint",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "dispute",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "wrong_contact",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "promised_date",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "claims_paid",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "other",
+        "n": 4,
+        "correct": 4
+      }
+    ],
+    "dates": {
+      "n": 4,
+      "correct": 4
+    },
+    "misses": [],
+    "latency": {
+      "avgMs": 2570,
+      "p95Ms": 3893
+    },
+    "results": [
+      {
+        "id": "forgot-1",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": "2026-11-02"
+      },
+      {
+        "id": "forgot-2",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "forgot-3",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.88,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "forgot-4",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.86,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "approval-1",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.87,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "approval-2",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "approval-3",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": "2026-11-05"
+      },
+      {
+        "id": "approval-4",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": "2026-11-15"
+      },
+      {
+        "id": "cash-1",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.95,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "cash-2",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.92,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "cash-3",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.95,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "cash-4",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.86,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "dispute-1",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.94,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "dispute-2",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.93,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "dispute-3",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.84,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "dispute-4",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.92,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "contact-1",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.95,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "contact-2",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.92,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "contact-3",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "promise-1",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.92,
+        "fallback": false,
+        "promisedDate": "2026-11-06",
+        "gotDate": "2026-11-06"
+      },
+      {
+        "id": "promise-2",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.9,
+        "fallback": false,
+        "promisedDate": "2026-11-30",
+        "gotDate": "2026-11-30"
+      },
+      {
+        "id": "promise-3",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.93,
+        "fallback": false,
+        "promisedDate": "2026-11-20",
+        "gotDate": "2026-11-20"
+      },
+      {
+        "id": "promise-4",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.95,
+        "fallback": false,
+        "promisedDate": "2026-11-03",
+        "gotDate": "2026-11-03"
+      },
+      {
+        "id": "paid-1",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.78,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "paid-2",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.95,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "paid-3",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.86,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "other-1",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.9,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "other-2",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.75,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "other-3",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.75,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "other-4",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.7,
+        "fallback": false,
+        "gotDate": null
+      }
+    ]
+  }
+}

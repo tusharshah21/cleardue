@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { providerName } from "@/lib/provider-name";
 import { addLineAction, scopeCheckAction, sendDraftAction, type ScopeState } from "@/app/actions";
 import { CachedBadge } from "@/components/cached-badge";
 import { ReplayedBadge } from "@/components/replayed-badge";
@@ -40,6 +41,7 @@ export function ScopeCheck({ projectId, currency, example }: { projectId: string
             {r.estimatedHours != null && <span className="text-sm text-muted-foreground">about {r.estimatedHours} h of work</span>}
             {state.replayed && <ReplayedBadge />}
             {state.cached && <CachedBadge />}
+            {state.provider && !state.replayed && !state.cached && <span className="text-xs text-muted-foreground">Answered by {providerName(state.provider)}</span>}
           </div>
           <p className="text-sm">{r.reasoning}</p>
           {r.quotedClauses.map((q) => (

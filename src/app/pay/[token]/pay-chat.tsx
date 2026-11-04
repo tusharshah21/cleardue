@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { providerName } from "@/lib/provider-name";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +15,7 @@ export interface ChatEntry {
   escalated: boolean;
   replayed: boolean;
   cached?: boolean;
+  provider?: string;
 }
 
 const SOURCE_LABEL: Record<string, string> = { scope: "Scope of work", invoice: "Invoice", thread: "Earlier messages" };
@@ -37,7 +39,7 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed, cached: data.cached }]);
+      setEntries((e) => [...e, { question: q, answer: data.answer, citations: data.citations, escalated: data.escalated, replayed: data.replayed, cached: data.cached, provider: data.provider }]);
       setQuestion("");
       if (data.plansAvailable) router.refresh(); // show the plan options the request unlocked
     } catch (e) {
@@ -65,6 +67,7 @@ export function PayChat({ token, history, suggestions, freelancerName }: { token
                 </ul>
               )}
               {e.escalated && <p className="mt-2 text-xs text-muted-foreground">Sent to {freelancerName} to answer personally.</p>}
+              {e.provider && !e.replayed && !e.cached && <p className="mt-2 text-xs text-muted-foreground">Answered by {providerName(e.provider)}</p>}
               {e.cached && (
                 <p className="mt-2 text-xs text-sky-700" title="An identical question was answered live earlier; that result was reused to stay within the AI quota">
                   Cached result from an earlier live run

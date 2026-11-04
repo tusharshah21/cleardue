@@ -38,6 +38,7 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
     escalated: q.escalated,
     replayed: q.replayed,
     cached: q.cached,
+    provider: q.provider ?? undefined,
   }));
 
   return (

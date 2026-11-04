@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { providerName } from "@/lib/provider-name";
 import { appUrl } from "@/lib/app-url";
 import { ProposalCard } from "@/components/proposal-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -68,6 +69,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
             {kase?.confidence != null && <Badge variant="outline">confidence {kase.confidence.toFixed(2)}</Badge>}
             {kase?.replayed && <ReplayedBadge />}
             {kase?.cached && <CachedBadge />}
+            {kase?.provider && !kase.replayed && !kase.cached && <span className="text-xs text-muted-foreground">Diagnosed by {providerName(kase.provider)}</span>}
             {kase && kase.state !== "open" && (
               <Badge variant={kase.state === "dispute" ? "destructive" : "secondary"}>
                 {kase.state}

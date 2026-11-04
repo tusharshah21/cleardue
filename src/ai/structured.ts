@@ -2,7 +2,7 @@
 import { generateText, Output, type LanguageModel } from "ai";
 import type { z } from "zod";
 import { readCache, writeCache, type CacheRequest } from "./cache";
-import { wasReplayed } from "./replay";
+import { providerOf, wasReplayed } from "./replay";
 
 /** Cap per model call (each task retries at most once). */
 export const AI_TIMEOUT_MS = 20_000;
@@ -16,6 +16,8 @@ export interface StructuredResult<T> {
   replayed?: boolean;
   /** True when an earlier live result for identical inputs was reused (demo freelancer only). */
   cached?: boolean;
+  /** Which provider and model actually produced a live answer ("openai/gpt-5.4-mini"), after any failover. */
+  provider?: string;
 }
 
 export async function structured<S extends z.ZodType>(opts: {
@@ -45,7 +47,7 @@ export async function structured<S extends z.ZodType>(opts: {
       const value = opts.schema.parse(output);
       const replayed = wasReplayed(steps);
       if (opts.cache && !replayed) await writeCache(opts.model, opts.cache, value);
-      return { value, fallback: false, replayed, cached: false };
+      return { value, fallback: false, replayed, cached: false, provider: replayed ? undefined : providerOf(steps) };
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
     }
