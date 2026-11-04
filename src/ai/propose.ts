@@ -3,6 +3,7 @@
 // can never double-execute an action.
 import { generateText, isStepCount, type LanguageModel, type ToolSet } from "ai";
 import * as prompt from "./prompts/propose-action";
+import { Budget, DIAGNOSE_BUDGET_MS } from "./budget";
 import { providerOf, wasReplayed } from "./replay";
 import { AI_TIMEOUT_MS } from "./structured";
 
@@ -18,9 +19,14 @@ export async function proposeAction(
   input: Parameters<typeof prompt.buildPrompt>[0],
   tools: ToolSet,
   toolCallsSoFar: () => number,
+  budget: Budget = new Budget(DIAGNOSE_BUDGET_MS),
 ): Promise<ProposeResult> {
   let error = "";
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (budget.exhausted()) {
+      error = budget.exhaustedMessage;
+      break;
+    }
     try {
       const result = await generateText({
         model,
@@ -28,7 +34,7 @@ export async function proposeAction(
         prompt: prompt.buildPrompt(input),
         tools,
         stopWhen: isStepCount(4),
-        abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS),
+        abortSignal: budget.signal(AI_TIMEOUT_MS),
         maxRetries: 0,
       });
       return { rationale: result.text.trim(), replayed: wasReplayed(result.steps), provider: providerOf(result.steps) };

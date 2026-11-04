@@ -100,12 +100,15 @@ function backoffFor(error: unknown): number {
 
 /** Retries a rate-limited or overloaded call once after a short backoff; any other error, and a second failure, go to the caller. */
 export function retryTransient(model: LanguageModelV4, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): LanguageModelV4 {
-  const once = async <T>(call: () => PromiseLike<T>): Promise<T> => {
+  // The action's time budget arrives as the abort signal: no backoff sleep or second try once it has fired or can't fit the wait.
+  const once = async <T>(signal: AbortSignal | undefined, call: () => PromiseLike<T>): Promise<T> => {
     try {
       return await call();
     } catch (e) {
-      if (!isTransient(e) || isDailyQuota(e)) throw e;
-      await sleep(backoffFor(e));
+      if (!isTransient(e) || isDailyQuota(e) || signal?.aborted) throw e;
+      const wait = backoffFor(e);
+      await Promise.race([sleep(wait), new Promise<void>((r) => signal?.addEventListener("abort", () => r(), { once: true }))]);
+      if (signal?.aborted) throw e;
       return call();
     }
   };
@@ -114,8 +117,8 @@ export function retryTransient(model: LanguageModelV4, sleep: (ms: number) => Pr
     provider: model.provider,
     modelId: model.modelId,
     supportedUrls: model.supportedUrls,
-    doGenerate: (options) => once(() => model.doGenerate(options)),
-    doStream: (options) => once(() => model.doStream(options)),
+    doGenerate: (options) => once(options.abortSignal, () => model.doGenerate(options)),
+    doStream: (options) => once(options.abortSignal, () => model.doStream(options)),
   };
 }
 
@@ -177,13 +180,15 @@ export function labelProvider(model: LanguageModelV4, label: string): LanguageMo
 
 /** Primary first. If it fails with a rate limit, spent quota, 5xx or isn't configured, the same request goes once to the
  * secondary (which brings its own backoff retry); anything else, like a bad request, is not another provider's to fix. */
-export function failover(primary: LanguageModelV4, secondary: LanguageModelV4): LanguageModelV4 {
-  const run = async <T>(call: (m: LanguageModelV4) => PromiseLike<T>): Promise<T> => {
+export function failover(primary: LanguageModelV4, secondary: LanguageModelV4, primarySliceMs = 12_000): LanguageModelV4 {
+  const run = async <T>(signal: AbortSignal | undefined, call: (m: LanguageModelV4, s?: AbortSignal) => PromiseLike<T>, slice?: AbortSignal): Promise<T> => {
     try {
-      return await call(primary);
+      return await call(primary, slice ? AbortSignal.any([...(signal ? [signal] : []), slice]) : signal);
     } catch (e) {
-      if (!isTransient(e) && !isUnavailable(e) && !isAuthError(e)) throw e;
-      return call(secondary);
+      // The whole action's budget is gone: nothing is left to try. A hung primary that only used up its own slice is another provider's job.
+      if (signal?.aborted) throw e;
+      if (!isTransient(e) && !isUnavailable(e) && !isAuthError(e) && !slice?.aborted) throw e;
+      return call(secondary, signal);
     }
   };
   return {
@@ -191,7 +196,8 @@ export function failover(primary: LanguageModelV4, secondary: LanguageModelV4): 
     provider: primary.provider,
     modelId: primary.modelId,
     supportedUrls: primary.supportedUrls,
-    doGenerate: (options) => run((m) => m.doGenerate(options)),
-    doStream: (options) => run((m) => m.doStream(options)),
+    // Only a one-shot call gets a primary slice; a stream's signal must stay alive for the whole answer.
+    doGenerate: (options) => run(options.abortSignal, (m, s) => m.doGenerate({ ...options, abortSignal: s }), AbortSignal.timeout(primarySliceMs)),
+    doStream: (options) => run(options.abortSignal, (m, s) => m.doStream({ ...options, abortSignal: s })),
   };
 }

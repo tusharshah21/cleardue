@@ -4,6 +4,7 @@ import type { LanguageModel } from "ai";
 import { appUrl } from "@/lib/app-url";
 import { cacheScopeFor } from "@/ai/cache";
 import type { Client, Freelancer, Invoice, Message, Prisma } from "@/generated/prisma/client";
+import { Budget, DIAGNOSE_BUDGET_MS } from "@/ai/budget";
 import { proposeAction } from "@/ai/propose";
 import type { Facts } from "@/ai/prompts/propose-action";
 import { getModel } from "@/ai/provider";
@@ -186,6 +187,8 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   if (!isOpen(invoice)) throw new Error(`Invoice is ${invoice.status}; nothing to collect`);
   if (existing?.state === "dispute") throw new Error("Case is in dispute; automation is stopped until you resolve it");
 
+  // One allowance for the whole diagnosis: the classification, any retry or failover, and the proposal's tool steps share it.
+  const budget = new Budget(DIAGNOSE_BUDGET_MS);
   const thread = toThread(invoice.messages);
   const hasReply = thread.some((m) => m.from === "client");
   if (hasReply) onStage("diagnosing");
@@ -195,6 +198,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
         invoiceSummary: `${formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency)} outstanding, due ${ymd(invoice.dueDate)}, ${daysOverdue(invoice, now)} days overdue`,
         thread,
         now,
+        budget,
         cacheScope: await cacheScopeFor(invoice.client.freelancer),
       })
     : { value: noReply(invoice, now), fallback: false as const };
@@ -243,6 +247,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
           },
           tools,
           () => counter.n,
+          budget,
         );
 
   onStage("saving");

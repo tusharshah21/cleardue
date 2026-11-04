@@ -1,5 +1,6 @@
 // AI tasks. Each takes its model as a parameter (getModel() in the app, a mock in tests).
 import type { LanguageModel } from "ai";
+import type { Budget } from "./budget";
 import type { CacheScope } from "./cache";
 import * as classifyPrompt from "./prompts/classify-reply";
 import * as payerPrompt from "./prompts/payer-assistant";
@@ -25,11 +26,12 @@ export function groundClassification(c: ClassifyReply, thread: ThreadMessage[]):
 
 export async function classifyReply(
   model: LanguageModel,
-  input: { clientName: string; invoiceSummary: string; thread: ThreadMessage[]; now?: Date; cacheScope?: CacheScope | null },
+  input: { clientName: string; invoiceSummary: string; thread: ThreadMessage[]; now?: Date; cacheScope?: CacheScope | null; budget?: Budget },
 ): Promise<StructuredResult<ClassifyReply>> {
   const today = (input.now ?? new Date()).toISOString().slice(0, 10);
   const result = await structured({
     model,
+    budget: input.budget,
     schema: ClassifyReplySchema,
     system: classifyPrompt.system,
     // Replies and the day (relative dates like "Friday" resolve against it), not the timestamps, which shift on every reseed.

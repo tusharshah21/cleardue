@@ -1,5 +1,6 @@
 import { isStepCount, streamText } from "ai";
 import type { AgAiEvent, AgAiRunInput } from "ag-studio";
+import { ANSWER_BUDGET_MS } from "@/ai/budget";
 import { getModel } from "@/ai/provider";
 import { providerOf } from "@/ai/replay";
 import { providerName } from "@/lib/provider-name";
@@ -35,7 +36,8 @@ export async function POST(req: Request) {
           messages,
           tools: analystTools(freelancer.id),
           stopWhen: isStepCount(6),
-          abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(55_000)]),
+          // The whole turn (steps, retries, failover) gets one allowance; running out ends it with a readable message.
+          abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(ANSWER_BUDGET_MS)]),
           maxRetries: 0,
         });
         for await (const part of result.fullStream) {
@@ -55,7 +57,8 @@ export async function POST(req: Request) {
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });
       } catch (e) {
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });
-        send({ type: "RUN_ERROR", message: `The analyst couldn't answer: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` });
+        const timedOut = e instanceof Error && /abort|timeout|timed out/i.test(`${e.name} ${e.message}`);
+        send({ type: "RUN_ERROR", message: timedOut ? `The analyst ran out of time (${ANSWER_BUDGET_MS / 1000}s). Try a narrower question, or ask again.` : `The analyst couldn't answer: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` });
       } finally {
         controller.close();
       }
