@@ -40,6 +40,8 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
   const open = isOpen(invoice);
   const items = invoice.items as unknown as LineItem[];
   const payLink = `${appUrl()}/pay/${invoice.payToken}`;
+  // What PayPal has delivered for this invoice: verified events are what close cases; rejected ones say why.
+  const webhooks = invoice.paypalInvoiceId ? await db.webhookEvent.findMany({ where: { resourceId: invoice.paypalInvoiceId }, orderBy: { receivedAt: "desc" }, take: 8 }) : [];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -205,6 +207,20 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
                 </li>
               ))}
             </ol>
+            <h3 className="mt-5 mb-2 text-sm font-medium">PayPal webhook events</h3>
+            {webhooks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">None received for this invoice yet; polling covers it.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {webhooks.map((w) => (
+                  <li key={w.id}>
+                    <span className="text-xs text-muted-foreground">{w.receivedAt.toISOString().slice(0, 19).replace("T", " ")}</span> {w.eventType.replace("INVOICING.INVOICE.", "")}{" "}
+                    {w.verified ? <span className="text-green-700">verified{w.processed ? ", processed" : ""}</span> : <span className="text-destructive">not verified</span>}
+                    {w.note && <span className="text-xs text-muted-foreground"> ({w.note.slice(0, 120)})</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
