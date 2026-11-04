@@ -2,6 +2,7 @@
 //   1. Can this business account create and send a USD invoice?
 //   2. Does PayPal accept configuration.partial_payment for this account? (blocked for IN/BR/IL invoicers)
 //   3. Does /remind accept additional_recipients? (then check the AP inbox under Sandbox > Notifications)
+//   4. Does PUT replace a draft (the plan pipeline relies on it)? Which country does the business account report?
 // Cleans up after itself (cancel with send_to_recipient=false, delete drafts).
 // Usage: npm run paypal:spike   (needs PAYPAL_*, SPIKE_PAYER_EMAIL, SPIKE_AP_EMAIL in .env)
 import "dotenv/config";
@@ -15,6 +16,7 @@ import {
   remindInvoice,
   sendInvoice,
   type CreateInvoiceInput,
+  updateDraftInvoice,
 } from "../src/paypal/invoices";
 
 const payer = process.env.SPIKE_PAYER_EMAIL;
@@ -51,13 +53,24 @@ const inv = await step("create_usd_draft", async () => {
 });
 const partial = await step("create_partial_payment_draft", async () => {
   const i = await createDraftInvoice({ ...base, partialPayment: { minimumAmountDueMinor: 500 } });
-  return { id: i.id, status: i.status };
+  const back = await getInvoice(i.id); // accepted AND kept: the flag must survive the round trip
+  return { id: i.id, status: i.status, allow_partial_payment: back.configuration?.partial_payment?.allow_partial_payment, minimum_amount_due: back.configuration?.partial_payment?.minimum_amount_due?.value };
 });
 if (inv) {
+  await step("put_draft_update", async () => {
+    const u = await updateDraftInvoice(inv.id, { ...base, items: [{ name: "Spike line (edited)", quantity: 2, unitAmountMinor: 1500, unit: "AMOUNT" }] });
+    const back = await getInvoice(inv.id);
+    return { status: back.status, amount: back.amount?.value, expected: "30.00", returned: u.id === inv.id };
+  });
   await step("send", () => sendInvoice(inv.id));
   await step("get_after_send", async () => {
     const i = await getInvoice(inv.id);
-    return { status: i.status, recipient_view_url: i.detail.metadata?.recipient_view_url };
+    return {
+      status: i.status,
+      recipient_view_url: i.detail.metadata?.recipient_view_url,
+      invoicer_country: i.invoicer?.address?.country_code ?? "(not in the API response)",
+      invoicer_business_name: i.invoicer?.business_name,
+    };
   });
   await step("remind_with_additional_recipients", async () => {
     await remindInvoice(inv.id, { subject: "Spike reminder", note: "Forwarded to AP", additionalRecipients: [ap] });

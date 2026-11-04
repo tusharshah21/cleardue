@@ -36,6 +36,8 @@ export interface PayPalInvoice {
     currency_code: string;
     metadata?: { recipient_view_url?: string; invoicer_view_url?: string };
   };
+  invoicer?: { business_name?: string; email_address?: string; address?: { country_code?: string } };
+  configuration?: { partial_payment?: { allow_partial_payment?: boolean; minimum_amount_due?: { value: string } } };
   amount?: { currency_code: string; value: string };
   due_amount?: { currency_code: string; value: string };
   payments?: { paid_amount?: { currency_code: string; value: string } };

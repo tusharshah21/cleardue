@@ -95,6 +95,8 @@ PayPal doesn't allow partial payments on invoices from merchants in India, Brazi
 - `split_invoices` (IN, BR, IL): the original invoice is replaced by one PayPal invoice per instalment.
 - `partial_payment` (everyone else): one replacement invoice that accepts part payments, with the first instalment as the minimum.
 
+**Sandbox note.** The sandbox REST app the current build was tested with is not India-registered: PayPal accepted `configuration.partial_payment` on it and kept the flag, and its API doesn't reveal the business account's country. So the strategy is chosen from `Freelancer.country` in our database (the demo freelancer is `IN`), not from the PayPal account, and the demo exercises `split_invoices` against an account that could also do `partial_payment`. The credentials come only from `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, so switching to another sandbox app is an env change.
+
 Either way the client always has something payable: the new drafts are created first, the original is re-read and only cancelled if it is still unpaid (silently), then the drafts are sent. If a send fails after the cancel, the plan stays `pending_send` and polling retries it. Amounts are integer minor units everywhere, and plans always sum exactly.
 
 ### Why not PayPal Pay Later?

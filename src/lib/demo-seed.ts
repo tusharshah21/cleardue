@@ -119,15 +119,17 @@ async function closePayPalInvoices(freelancerId: string) {
   const invoices = await db.invoice.findMany({
     where: { client: { freelancerId }, paypalInvoiceId: { not: null }, status: { in: [...OPEN, "DRAFT"] } },
   });
+  let closed = 0;
   for (const i of invoices) {
     try {
       if (i.status === "DRAFT") await deleteDraftInvoice(i.paypalInvoiceId!);
       else await cancelInvoice(i.paypalInvoiceId!, { sendToRecipient: false, note: "Replaced by a demo reset." });
+      closed++;
     } catch (e) {
       console.warn(`Demo reset: could not close PayPal invoice ${i.paypalInvoiceId}:`, e instanceof Error ? e.message : e);
     }
   }
-  return invoices.length;
+  return closed;
 }
 
 /** Replaces the demo freelancer's data with the three stories. Only the demo freelancer is touched. */

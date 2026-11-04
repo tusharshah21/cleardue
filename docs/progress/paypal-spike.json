@@ -1,0 +1,57 @@
+{
+  "ranAt": "2026-11-04T05:41:13.790Z",
+  "oauth_token": {
+    "ok": true,
+    "out": "received"
+  },
+  "create_usd_draft": {
+    "ok": true,
+    "out": {
+      "id": "INV2-7JBW-TWFY-NV9R-L96E",
+      "status": "DRAFT"
+    }
+  },
+  "create_partial_payment_draft": {
+    "ok": true,
+    "out": {
+      "id": "INV2-32QT-K4T4-4H8Y-KUY2",
+      "status": "DRAFT",
+      "allow_partial_payment": true,
+      "minimum_amount_due": "5.00"
+    }
+  },
+  "put_draft_update": {
+    "ok": true,
+    "out": {
+      "status": "DRAFT",
+      "amount": "30.00",
+      "expected": "30.00",
+      "returned": true
+    }
+  },
+  "send": {
+    "ok": true,
+    "out": {
+      "payerViewUrl": "https://www.sandbox.paypal.com/invoice/p/#INV2-7JBW-TWFY-NV9R-L96E"
+    }
+  },
+  "get_after_send": {
+    "ok": true,
+    "out": {
+      "status": "SENT",
+      "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#7JBWTWFYNV9RL96E",
+      "invoicer_country": "(not in the API response)",
+      "invoicer_business_name": "ClearDue Spike"
+    }
+  },
+  "remind_with_additional_recipients": {
+    "ok": true,
+    "out": "accepted; now check Sandbox > Notifications for an email to ap@acmelabs.example"
+  },
+  "cancel_silently": {
+    "ok": true
+  },
+  "delete_partial_draft": {
+    "ok": true
+  }
+}
