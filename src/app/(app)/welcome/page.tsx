@@ -86,7 +86,7 @@ export default async function WelcomePage() {
           ))}
         </div>
       ) : (
-        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">The demo stories aren&apos;t in this database. Run <code>npm run seed</code> to add them.</p>
+        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">The demo stories aren&apos;t in this database yet. Click <strong>Reset demo</strong> below to create them (or run <code>npm run seed</code>).</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border p-4">

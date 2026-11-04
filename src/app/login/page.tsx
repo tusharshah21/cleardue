@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   const { DEMO_EMAIL: email, DEMO_PASSWORD: password } = process.env;
-  const show = (isDemoMode() || isMockMode()) && email && password;
+  // SHOW_DEMO_LOGIN=true shows the (already public) demo login on the hosted demo, where DEMO_MODE is off.
+  const show = (isDemoMode() || isMockMode() || process.env.SHOW_DEMO_LOGIN === "true") && email && password;
   return <LoginForm demo={show ? { email, password } : null} />;
 }

@@ -132,9 +132,16 @@ async function closePayPalInvoices(freelancerId: string) {
   return closed;
 }
 
+const demoProfile = { name: "Aarav Mehta", businessName: "Aarav Mehta Design", country: "IN", currency: "USD", timezone: "Asia/Kolkata", mandate: DEFAULT_MANDATE };
+
+/** The demo freelancer, created (without stories) if the database has never been seeded, so a first sign-in works.
+ * The stories come from Reset demo or `npm run seed`. */
+export const ensureDemoFreelancer = () =>
+  db.freelancer.upsert({ where: { email: demoEmail() }, update: {}, create: { email: demoEmail(), ...demoProfile } });
+
 /** Replaces the demo freelancer's data with the three stories. Only the demo freelancer is touched. */
 export async function resetDemo({ withPayPal }: { withPayPal: boolean }) {
-  const profile = { name: "Aarav Mehta", businessName: "Aarav Mehta Design", country: "IN", currency: "USD", timezone: "Asia/Kolkata", mandate: DEFAULT_MANDATE };
+  const profile = demoProfile;
   const existing = await db.freelancer.findUnique({ where: { email: demoEmail() } });
   const closed = existing && withPayPal ? await closePayPalInvoices(existing.id) : 0;
   // ponytail: no lock, two resets at the same moment can interleave; add a pg advisory lock if that ever shows up.

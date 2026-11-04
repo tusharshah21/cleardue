@@ -41,6 +41,12 @@ services:
         sync: false
       - key: DEMO_PASSWORD
         sync: false
+      # Show the demo login on the login page (it is public in the README anyway).
+      - key: SHOW_DEMO_LOGIN
+        value: "true"
+      # Sandbox personal (buyer) account that receives the demo invoices, so a real checkout can pay them.
+      - key: SEED_CLIENT_EMAIL
+        sync: false
       # Judges share the demo login: the sync cron resets the three demo stories daily at 03:00 UTC.
       - key: DEMO_DAILY_RESET
         value: "true"

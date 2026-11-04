@@ -27,8 +27,9 @@ export async function logIn(email: string, password: string): Promise<boolean> {
   const demoPassword = process.env.DEMO_PASSWORD ?? "";
   if (!demoEmail || !demoPassword) return false;
   if (!(sameSecret(email.trim().toLowerCase(), demoEmail.toLowerCase()) && sameSecret(password, demoPassword))) return false;
-  const freelancer = await db.freelancer.findUnique({ where: { email: demoEmail.toLowerCase() } });
-  if (!freelancer) return false;
+  // The credentials are the demo ones, so a database that was never seeded gets its demo freelancer now (lazy import:
+  // demo-seed pulls in the PayPal client). Start here then offers Reset demo to create the stories.
+  const freelancer = (await db.freelancer.findUnique({ where: { email: demoEmail.toLowerCase() } })) ?? (await (await import("./demo-seed")).ensureDemoFreelancer());
   const s = await session();
   s.freelancerId = freelancer.id;
   await s.save();
