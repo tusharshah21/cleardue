@@ -52,3 +52,4 @@ next-env.d.ts
 /coverage/
 /.paypal-mock.json
 evals/last-run.json
+evals/last-compare.json

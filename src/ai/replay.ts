@@ -33,6 +33,14 @@ function fill(content: LanguageModelV4Content[], facts: Record<string, unknown>)
 
 /** Marks a replayed step, so the UI can label it ("replayed response") instead of passing it off as live. */
 const REPLAYED = { cleardue: { replayed: true } };
+/** Which provider and model produced the last live step, as stamped by labelProvider ("openai/gpt-5.4-mini"). */
+export const providerOf = (steps: { providerMetadata?: Record<string, Record<string, unknown>> | undefined }[]): string | undefined => {
+  for (const s of [...steps].reverse()) {
+    const p = s.providerMetadata?.cleardue?.provider;
+    if (typeof p === "string") return p;
+  }
+  return undefined;
+};
 export const wasReplayed = (steps: { providerMetadata?: Record<string, Record<string, unknown>> | undefined }[]) =>
   steps.some((s) => s.providerMetadata?.cleardue?.replayed === true);
 
@@ -64,17 +72,24 @@ export function replayModel(fixtures: Fixture[], fallthrough: LanguageModelV4): 
   };
 }
 
-/** A rate limit (429, which Google reports as RESOURCE_EXHAUSTED) or Gemini's "high demand" overload (503 UNAVAILABLE).
- * Both clear on their own, so they are worth one retry and then the recorded response. */
+/** Worth failing over or retrying: a rate limit or spent quota (429; Google says RESOURCE_EXHAUSTED, OpenAI insufficient_quota),
+ * any 5xx, or Gemini's "high demand" overload. These clear on their own or are another provider's problem, not the request's. */
 export function isTransient(error: unknown): boolean {
   const e = error as { statusCode?: number; message?: string } | null;
-  return e?.statusCode === 429 || e?.statusCode === 503 || /RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|rate.?limit|(429|503)/i.test(e?.message ?? "");
+  const status = e?.statusCode;
+  return status === 429 || (typeof status === "number" && status >= 500) || /RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|rate.?limit|insufficient_quota|exceeded your current quota|\b(429|500|502|503|504)\b/i.test(e?.message ?? "");
 }
+
+/** A rejected key (401/403): not worth retrying, but a good reason to try the other provider rather than fail every answer. */
+export const isAuthError = (error: unknown) => [401, 403].includes((error as { statusCode?: number } | null)?.statusCode ?? 0);
+
+/** A provider with no key or model configured. The secondary takes over from it just as it would from an outage. */
+export const isUnavailable = (error: unknown) => (error as { unavailable?: boolean } | null)?.unavailable === true;
 
 const BACKOFF_MS = 4_000;
 
 /** A spent daily quota (the free tier allows few requests a day): retrying in seconds can't help, it resets in hours. */
-export const isDailyQuota = (error: unknown) => /per day|PerDay|retry in d+h/i.test((error as { message?: string } | null)?.message ?? "");
+export const isDailyQuota = (error: unknown) => /per day|PerDay|retry in \d+h|insufficient_quota|exceeded your current quota/i.test((error as { message?: string } | null)?.message ?? "");
 
 /** Seconds the provider asked us to wait, if it said (Retry-After header), capped so a request never hangs. */
 function backoffFor(error: unknown): number {
@@ -127,7 +142,56 @@ export function replayOnTransient(fixtures: Fixture[], live: LanguageModelV4): L
 /** Stands in for the live model when it isn't configured, so callers hit their fallback with a readable error. */
 export function unavailableModel(reason: string): LanguageModelV4 {
   const fail = async (): Promise<never> => {
-    throw new Error(`AI unavailable: ${reason}`);
+    throw Object.assign(new Error(`AI unavailable: ${reason}`), { unavailable: true });
   };
   return { specificationVersion: "v4", provider: "none", modelId: "unavailable", supportedUrls: {}, doGenerate: fail, doStream: fail };
+}
+
+/** Stamps every answer a model produces with who produced it, so the UI can say "answered by OpenAI gpt-5.4-mini". */
+export function labelProvider(model: LanguageModelV4, label: string): LanguageModelV4 {
+  const mark = (pm: unknown) => ({ ...(pm as Record<string, Record<string, unknown>> | undefined), cleardue: { ...(pm as Record<string, Record<string, unknown>> | undefined)?.cleardue, provider: label } });
+  return {
+    specificationVersion: "v4",
+    provider: model.provider,
+    modelId: model.modelId,
+    supportedUrls: model.supportedUrls,
+    doGenerate: async (options) => {
+      const res = await model.doGenerate(options);
+      return { ...res, providerMetadata: mark(res.providerMetadata) as never };
+    },
+    doStream: async (options) => {
+      const res = await model.doStream(options);
+      return {
+        ...res,
+        stream: res.stream.pipeThrough(
+          new TransformStream({
+            transform(part, controller) {
+              controller.enqueue(part.type === "finish" ? ({ ...part, providerMetadata: mark(part.providerMetadata) } as typeof part) : part);
+            },
+          }),
+        ),
+      };
+    },
+  };
+}
+
+/** Primary first. If it fails with a rate limit, spent quota, 5xx or isn't configured, the same request goes once to the
+ * secondary (which brings its own backoff retry); anything else, like a bad request, is not another provider's to fix. */
+export function failover(primary: LanguageModelV4, secondary: LanguageModelV4): LanguageModelV4 {
+  const run = async <T>(call: (m: LanguageModelV4) => PromiseLike<T>): Promise<T> => {
+    try {
+      return await call(primary);
+    } catch (e) {
+      if (!isTransient(e) && !isUnavailable(e) && !isAuthError(e)) throw e;
+      return call(secondary);
+    }
+  };
+  return {
+    specificationVersion: "v4",
+    provider: primary.provider,
+    modelId: primary.modelId,
+    supportedUrls: primary.supportedUrls,
+    doGenerate: (options) => run((m) => m.doGenerate(options)),
+    doStream: (options) => run((m) => m.doStream(options)),
+  };
 }

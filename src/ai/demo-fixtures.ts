@@ -170,6 +170,7 @@ export const DEMO_FIXTURES: Fixture[] = [
         escalate: false,
         escalationReason: null,
         complaint: false,
+        wantsPlan: false,
       }),
     ],
   },

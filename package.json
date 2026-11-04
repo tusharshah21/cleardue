@@ -15,11 +15,13 @@
     "seed:paypal": "tsx --conditions=react-server prisma/seed.mts --paypal",
     "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts",
     "paypal:webhook": "tsx scripts/paypal-webhook.mts",
-    "eval": "tsx scripts/eval.mts"
+    "eval": "tsx scripts/eval.mts",
+    "ai:compare": "tsx --conditions=react-server scripts/ai-compare.mts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.94",
     "@ai-sdk/google": "^4.0.111",
+    "@ai-sdk/openai": "^4.0.108",
     "@ai-sdk/provider": "4.0.35",
     "@base-ui/react": "^1.9.0",
     "@paypal/agent-toolkit": "^1.11.0",

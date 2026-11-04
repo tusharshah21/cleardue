@@ -43,7 +43,7 @@ flowchart LR
     INV[Invoicing v2]
     NOT[Webhooks v1]
   end
-  LLM[Gemini via AI SDK<br/>provider and model from env]
+  LLM[OpenAI, with Gemini as fallback<br/>via AI SDK, provider and model from env]
 
   C -->|reply / question| UI
   C --> PAY
@@ -120,7 +120,7 @@ Pay Later lets the payer spread the cost while the merchant is paid in full, whi
 
 ## AI usage
 
-Every AI call uses the [AI SDK](https://ai-sdk.dev). The hosted demo runs on Google Gemini (`gemini-3.5-flash-lite`, through the Gemini API's free tier in Google AI Studio); the provider is swappable: `AI_PROVIDER=google` (the default) or `AI_PROVIDER=anthropic` selects Google Gemini or Anthropic Claude, and the model name always comes from `AI_MODEL`. Both support the tool calling and structured output the tasks need. Prompts live in [src/ai/prompts](src/ai/prompts), and every output is parsed by a Zod schema ([src/ai/schemas.ts](src/ai/schemas.ts)) before anything uses it. Each call is capped at 20 seconds; on timeout or a bad response the task returns a readable fallback that sends the work to a human.
+Every AI call uses the [AI SDK](https://ai-sdk.dev). The primary provider is OpenAI (`gpt-5.4-mini`), with Google Gemini (`gemini-3.5-flash-lite`) as the fallback. Both are chosen by env (`AI_PROVIDER` / `AI_MODEL`, and `AI_FALLBACK_PROVIDER` / `AI_FALLBACK_MODEL`), and Anthropic Claude is supported too, so the provider is swappable. All three support the tool calling and structured output the tasks need. Prompts live in [src/ai/prompts](src/ai/prompts), and every output is parsed by a Zod schema ([src/ai/schemas.ts](src/ai/schemas.ts)) before anything uses it. Each call is capped at 20 seconds; on timeout or a bad response the task returns a readable fallback that sends the work to a human. Every live answer says which provider and model produced it ("Answered by OpenAI gpt-5.4-mini", "Diagnosed by Gemini gemini-3.5-flash-lite"), including after a failover.
 
 | Task | Output | Guard in code |
 | --- | --- | --- |
@@ -131,9 +131,9 @@ Every AI call uses the [AI SDK](https://ai-sdk.dev). The hosted demo runs on Goo
 
 An overdue invoice with no client reply never reaches the model: code marks it `no_response` ("No reply yet").
 
-**Free tier and data use.** On Google's free tier, content sent to the model may be used by Google to improve its products, and some models allow only about 20 requests a day. That is fine for building and testing a demo that only handles made-up data; production uses a paid tier (where content isn't used that way and the limits are far higher), or Claude. The hosted demo's Gemini project is moved to a paid tier before judging. One key is used; quotas are never worked around with extra keys.
+**Data use.** Content sent to a provider is demo data (made-up clients and invoices). OpenAI's API doesn't use API content for training by default. Gemini's free tier does allow Google to use content to improve its products and limits some models to about 20 requests a day, so the Gemini project used as the fallback is moved to a paid tier before judging; production uses paid tiers throughout. One key per provider is used, and quotas are never worked around with extra keys.
 
-**Rate limits and overload.** Gemini has per-minute limits, and sometimes answers 503 "high demand". Either one is retried once after a short backoff (4 seconds, or the provider's Retry-After, capped at 10). If it still fails, a seed story gets its recorded response, labelled "Replayed response"; anything else uses the task's readable fallback that sends the work to a human.
+**Failover and rate limits.** If the primary provider answers with a rate limit or spent quota (429), any 5xx, a rejected key (401/403) or has no key configured, the same request goes once to the secondary, which retries once after a short backoff (4 seconds, or the provider's Retry-After, capped at 10; a spent daily quota skips the wait). Other errors, like a bad request, don't fail over. If the secondary fails too, a seed story gets its recorded response, labelled "Replayed response"; anything else uses the task's readable fallback that sends the work to a human. The answer is labelled with the provider that actually produced it.
 
 **Response cache (demo account only).** The first live result of a diagnosis, scope check or pay-page answer is stored, and an identical request later reuses it, labelled "Cached result from an earlier live run" (never passed off as a fresh call). Identical means the same model, prompt, replies, scope text, question and day, so a different reply, a new day or a changed prompt always calls the model. Only the demo freelancer has a cache, replayed and failed results are never stored, and the tool-calling step that proposes actions is not cached. Reset demo keeps cached results while the seed stories are unchanged (a fingerprint of them is part of every entry) and deletes entries made under other stories.
 
@@ -150,9 +150,27 @@ Two labelled sets, reported separately:
 npm run eval
 ```
 
-It runs each reply through `classifyReply` with the live model (it ignores `DEMO_MODE`, and needs `AI_MODEL` and the key for `AI_PROVIDER`). Calls are paced at one every 6 seconds (`EVAL_DELAY_MS`) to stay under the free tier's per-minute limit. For each set it prints overall and per-reason accuracy plus promised-date resolution and lists the misses, then writes `evals/last-run.json`. `npm run eval -- real` runs one set.
+It runs each reply through `classifyReply` with the live primary model (it ignores `DEMO_MODE` and failover, and needs `AI_MODEL` and the key for `AI_PROVIDER`). Calls are paced at one every 6 seconds (`EVAL_DELAY_MS`), which suits Gemini's free tier; use `EVAL_DELAY_MS=0` on a paid tier. For each set it prints overall and per-reason accuracy, latency (average and p95) and promised-date resolution, lists the misses, then writes `evals/last-run.json` (or `EVAL_OUT`). `npm run eval -- real` runs one set. `npm run ai:compare` runs fixed scenarios for the other AI tasks (scope check, pay-page assistant, the proposal tool loop through the real mandate gate, and the analyst agent) against one provider.
 
-Live runs of the synthetic set on `gemini-3.5-flash-lite` (saved in [evals/results](evals/results)): 28 of 30 (93%) on the first run, where the two misses were the ambiguous replies above, read as `forgot`. After tightening the `other` guidance in the classify prompt, 29 of 30 and then 30 of 30 on two more runs, with 4 of 4 promised dates resolved each time. The model is not deterministic: the 29 had one different miss (the prompt-injection case read as `claims_paid`, which the mandate would also have held for approval), so expect a point either way between runs. On the free tier some models allow only about 20 requests a day (`gemini-3.6-flash`, `gemini-3.5-flash`); the runner stops early, and says so, after three AI errors in a row.
+Live runs of the synthetic set (saved in [evals/results](evals/results)). On `gemini-3.5-flash-lite` the first run scored 28 of 30 (93%), where the two misses were the ambiguous replies above, read as `forgot`. After tightening the `other` guidance in the classify prompt it scored 29 of 30 and then 30 of 30, with 4 of 4 promised dates resolved each time. The model is not deterministic: the 29 had one different miss (the prompt-injection case read as `claims_paid`, which the mandate would also have held for approval), so expect a point either way between runs.
+
+### Choosing the provider (2026-11-04)
+
+Same 30 replies and the same fixed task scenarios against each model, one provider at a time with no failover (raw results in [evals/results](evals/results)). The scenarios were 4 scope checks, 5 pay-page questions (including a prompt injection), 4 proposal tool loops through the real mandate gate (each must call the right tool with no invalid input) and 2 analyst questions (one reads, one proposes).
+
+| Model | Eval accuracy | Eval latency (avg, p95) | Scope | Pay page | Proposals | Analyst |
+| --- | --- | --- | --- | --- | --- | --- |
+| **OpenAI gpt-5.4-mini, no reasoning (primary)** | 30/30 | 2.4 s, 3.4 s | 4/4 | 5/5 | 4/4 | 2/2 |
+| OpenAI gpt-5.4-mini, low reasoning | 30/30 | 3.1 s, 4.5 s | 4/4 | 5/5 | 4/4 | 2/2 |
+| OpenAI gpt-5.4-nano | 30/30 | 2.6 s, 3.9 s | 1/4 | passed all but my own check | 4/4 | 2/2 |
+| OpenAI gpt-4.1-mini | 29/30 | 1.9 s, 2.3 s | not run | not run | not run | not run |
+| Gemini gemini-3.5-flash-lite (fallback) | 30/30 | 4.3 s, 7.2 s | 4/4 | 5/5 | see below | see below |
+
+The Gemini tool-loop rows could not be measured cleanly. A first run was cut short by a network drop (its file was overwritten by the later run, so the Gemini scope and pay-page cells come from that run's console output), and from mid-afternoon the Gemini API was slow for everything: a one-word request took 28 to 31 seconds, and a later full run scored 0/4 on scope checks, 4/5 on the pay page, 0/4 on proposals and 1/2 on the analyst, nearly all of it timeouts at 20 to 60 seconds. That is a snapshot, not a verdict on the model, but it is the reliability the primary has to beat.
+
+**Decision:** `gpt-5.4-mini` with reasoning off is the primary. Accuracy is equal to Gemini's (100% on the eval and on every task scenario), it is steadier, and it is about twice as fast. `gpt-5.4-nano` is cheaper but called React and copywriting requests gray zone and a third revision round in scope, so it is out. Reasoning "low" gave the same accuracy about 30% slower; `OPENAI_REASONING_EFFORT` changes it. Gemini stays configured as the fallback, which is what the failover is for. The eval has no real replies yet (`evals/real.json` is empty), so a harder real set could change the ranking.
+
+On the free tier some Gemini models allow only about 20 requests a day (`gemini-3.6-flash`, `gemini-3.5-flash`); the eval runner stops early, and says so, after three AI errors in a row.
 
 ### Demo mode
 
@@ -247,10 +265,12 @@ See [.env.example](.env.example). Never commit `.env`.
 | `PAYPAL_BASE_URL` | Must be `https://api-m.sandbox.paypal.com` |
 | `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
-| `AI_PROVIDER` | `google` (default, Gemini) or `anthropic` (Claude) |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini API key from Google AI Studio (free tier) |
-| `ANTHROPIC_API_KEY` | Only when `AI_PROVIDER=anthropic` |
-| `AI_MODEL` | Model name for the chosen provider, e.g. `gemini-3.5-flash-lite`; never hard-coded |
+| `AI_PROVIDER`, `AI_MODEL` | The primary provider (`openai`, `google` or `anthropic`) and its model, e.g. `openai` and `gpt-5.4-mini`; never hard-coded |
+| `AI_FALLBACK_PROVIDER`, `AI_FALLBACK_MODEL` | Optional secondary, e.g. `google` and `gemini-3.5-flash-lite`: takes over once per request on a quota error, a 5xx, a rejected key or a missing key on the primary |
+| `OPENAI_API_KEY` | OpenAI key (when OpenAI is the primary or the fallback) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini key from Google AI Studio (when Gemini is used) |
+| `ANTHROPIC_API_KEY` | Only when `anthropic` is used |
+| `OPENAI_REASONING_EFFORT` | Optional: `none` (default), `minimal`, `low`, `medium` or `high` for OpenAI reasoning models |
 | `DEMO_MODE` | `true` replays recorded AI responses for the seeded stories, labelled in the UI. The hosted demo runs with `false` (live calls) |
 | `DEMO_EMAIL`, `DEMO_PASSWORD`, `SESSION_PASSWORD` | Single demo login; the session secret needs 32+ characters. The hosted demo uses `demo@cleardue.app` / `judge-cleardue-2026` |
 | `AG_STUDIO` | AG Studio licence key for `/analyst`. A client-side key, read server-side and given only to that page (never `NEXT_PUBLIC_`, never logged). Without it Studio shows a trial watermark |
