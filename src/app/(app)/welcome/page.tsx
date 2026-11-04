@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireFreelancer } from "@/lib/auth";
 import { effectiveMandate, inQuietHours } from "@/agent/mandate";
 import { db } from "@/lib/db";
+import { ago, readTimes } from "@/lib/app-state";
 import { nextScheduledReset } from "@/lib/demo-seed";
 import { LocalTime } from "./local-time";
 import { ResetDemo } from "./reset-demo";
@@ -49,6 +50,7 @@ export default async function WelcomePage() {
     orderBy: { createdAt: "asc" },
   });
   const now = new Date();
+  const { lastScheduledSyncAt } = await readTimes();
   const stories = STORIES.flatMap((s) => {
     const invoice = invoices.find((i) => i.client.name === s.client);
     if (!invoice) return [];
@@ -93,7 +95,7 @@ export default async function WelcomePage() {
         <div className="flex-1 text-sm text-muted-foreground">
           <p>Demo resets daily. Use Reset demo if a story is already finished.</p>
           <p className="text-xs">
-            Next automatic reset: <LocalTime iso={nextScheduledReset(now).toISOString()} />
+            Next automatic reset: <LocalTime iso={nextScheduledReset(now).toISOString()} />. Last automatic sync: {ago(lastScheduledSyncAt, now)}.
           </p>
         </div>
         <ResetDemo />

@@ -12,7 +12,7 @@
     "paypal:spike": "tsx scripts/paypal-spike.mts",
     "seed": "prisma db seed",
     "postinstall": "prisma generate",
-    "seed:paypal": "tsx prisma/seed.mts --paypal",
+    "seed:paypal": "tsx --conditions=react-server prisma/seed.mts --paypal",
     "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts",
     "paypal:webhook": "tsx scripts/paypal-webhook.mts",
     "eval": "tsx scripts/eval.mts"

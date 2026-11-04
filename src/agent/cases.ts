@@ -259,7 +259,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   const cached = !!classification.cached;
   await db.case.update({ where: { id: kase.id }, data: { replayed, cached } });
   if (cached) await timeline(invoiceId, kase.id, "cached", "The diagnosis reused a cached result from an earlier live run (same reply, same day)");
-  if (replayed) await timeline(invoiceId, kase.id, "replayed", "DEMO_MODE: this diagnosis used recorded AI responses (replayed, not live)");
+  if (replayed) await timeline(invoiceId, kase.id, "replayed", "This diagnosis used recorded AI responses (replayed, not live)");
   return kase.id;
 }
 

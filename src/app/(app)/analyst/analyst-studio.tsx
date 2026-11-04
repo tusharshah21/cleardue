@@ -63,9 +63,9 @@ const initialStateFor = (narrow: boolean) => ({
             plans: { xTrack: 0, yTrack: 50, xSpan: 24, ySpan: 24 },
           }
         : {
-            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 14 },
-            decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 30 },
-            plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 30 },
+            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 18 },
+            decisions: { xTrack: 0, yTrack: 18, xSpan: 12, ySpan: 30 },
+            plans: { xTrack: 12, yTrack: 18, xSpan: 12, ySpan: 30 },
           },
     },
   ],

@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { markNow } from "@/lib/app-state";
 import { dailyDemoReset } from "@/lib/demo-seed";
 import { syncStale } from "@/lib/invoicing";
 import { retryPendingPlans } from "@/plans/accept";
@@ -11,6 +12,7 @@ export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   const given = req.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
   if (!secret || !timingSafeEqual(digest(given), digest(secret))) return Response.json({ error: "unauthorized" }, { status: 401 });
+  await markNow("lastScheduledSyncAt");
   const demoReset = await dailyDemoReset();
   return Response.json({ demoReset, ...(await syncStale()), plansRetried: await retryPendingPlans() });
 }
