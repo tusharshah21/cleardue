@@ -183,7 +183,7 @@ export const CUSTOM_WIDGETS = [
     label: "Mandate decisions",
     comp: DecisionsWidget,
     dataMapping: fieldset("Decision fields: Client, Action, Mandate verdict, Outcome, Reasons, Date."),
-    defaultSize: { width: 12, height: 16 },
+    defaultSize: { width: 12, height: 24 },
     ai: { description: "Counts of agent proposals the mandate allowed, held for approval or blocked, plus the latest decisions with reasons.", usage: "Use to show how the agent's proposals were checked. Map the Mandate decisions fields." },
   },
   {
@@ -192,7 +192,7 @@ export const CUSTOM_WIDGETS = [
     label: "Plan tracker",
     comp: PlansWidget,
     dataMapping: fieldset("Plan instalment fields: Client, Plan, Strategy, Part, Amount, Currency, Due, Status, Paid."),
-    defaultSize: { width: 12, height: 16 },
+    defaultSize: { width: 12, height: 24 },
     ai: { description: "Each payment plan with its instalments and a progress bar of the paid ones.", usage: "Use to track plans in progress. Map the Payment plans fields." },
   },
 ] as unknown as AgWidgetDefinition[];

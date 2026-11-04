@@ -2,7 +2,7 @@
 
 // The collections analyst dashboard: AG Studio with ClearDue's three custom widgets, a theme matching the rest of the
 // app, a default report, and the analyst agent (a Client Tool Runner whose server side is /api/analyst/run).
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AgStudioAiModule, clientToolRunner, createAiHarness, studioTheme, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
 import { AgStudio, AgStudioProvider, createWidgets } from "ag-studio-react";
 import type { DecisionRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
@@ -56,8 +56,8 @@ const initialState = {
       },
       widgetLayout: {
         owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 14 },
-        decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 16 },
-        plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 16 },
+        decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 24 },
+        plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 24 },
       },
     },
   ],
@@ -140,6 +140,10 @@ export function AnalystStudio({ receivables, decisions, plans }: { receivables: 
     [receivables, decisions, plans],
   );
 
+  // The widget editor is hidden until asked for, so the report gets the room; the AI panel is always there.
+  const [editing, setEditing] = useState(false);
+  const panels = useMemo(() => ({ edit: { left: ["ai"], right: editing ? ["edit"] : [] } }), [editing]);
+
   const ai = useMemo(
     () =>
       ({ api }: { api: AgStudioApi }) => {
@@ -165,10 +169,17 @@ export function AnalystStudio({ receivables, decisions, plans }: { receivables: 
   );
 
   return (
-    <div className="h-[calc(100vh-9rem)] min-h-[640px]">
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className="rounded-md border px-3 py-1 text-sm hover:bg-muted">
+          {editing ? "Done editing" : "Edit layout"}
+        </button>
+      </div>
+      <div className="h-[calc(100vh-12rem)] min-h-[640px]">
       <AgStudioProvider modules={[AgStudioAiModule]}>
-        <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" panels={{ edit: { left: ["ai"], right: ["edit"] } } as never} data={data} initialState={initialState} widgets={widgets as never} theme={theme as never} ai={ai} />
+        <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" panels={panels as never} data={data} initialState={initialState} widgets={widgets as never} theme={theme as never} ai={ai} />
       </AgStudioProvider>
+      </div>
     </div>
   );
 }

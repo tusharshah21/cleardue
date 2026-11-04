@@ -65,6 +65,17 @@ flowchart LR
 
 **LLM proposes, deterministic TypeScript validates.** The model never calls PayPal directly. Every tool call goes through `gate()` in [src/agent/tools.ts](src/agent/tools.ts), which turns it into an `AgentAction` and runs `checkAction()` from [src/agent/mandate.ts](src/agent/mandate.ts) against the freelancer's mandate for that client: autopilot, never auto-contact, minimum confidence, tone ceiling, maximum instalments, minimum first payment, latest final date and quiet hours in the client's time zone. The result is `allow` (runs now), `needs_approval` (queued on Approvals with the draft editable) or `deny` (recorded with reasons, never run). The mandate module has 100% statement and branch coverage (`npm run test:mandate`).
 
+## Collections analyst (AG Studio)
+
+`/analyst` is an [AG Studio](https://www.ag-grid.com/studio/) dashboard for the freelancer, built on the Studio Agent Framework:
+
+- **Three custom widgets** ([widgets.tsx](src/app/(app)/analyst/widgets.tsx)): *Who still owes what* (open invoices, most overdue first, with the diagnosed reason and next action), *Mandate decisions* (how many proposals the mandate allowed, held for approval or blocked, with reasons) and *Plan tracker* (each payment plan's instalments and progress). They are registered with `createWidgets`, so they take part in Studio's filters, editor and AI like the built-in widgets.
+- **Theme and report:** a Studio theme mapped to the app's colours and type, and a default report with the three widgets. The data sources are read server-side for the signed-in freelancer.
+- **A custom agent:** the collections analyst is a Client Tool Runner ([analyst-studio.tsx](src/app/(app)/analyst/analyst-studio.tsx)) whose server side ([route.ts](src/app/api/analyst/run/route.ts)) runs the app's model (Gemini or Claude) in a tool loop over read tools (receivables, decisions, plans) and four propose tools.
+- **Its proposals go through the mandate and always to Approvals.** The same check as the diagnosis agent runs, but the analyst can never auto-run anything: an action the mandate would allow is downgraded to "needs your approval", and a mandate denial stays a denial ([analyst.ts](src/agent/analyst.ts), [tests](src/agent/analyst.test.ts)). Approving a proposal checks the mandate again.
+
+AG Studio is a commercial component. The hackathon trial key goes in `AG_STUDIO`, never in the repo; without it Studio shows a trial watermark and logs a licence notice.
+
 ## PayPal APIs used
 
 All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other host.
