@@ -2,7 +2,7 @@
 
 // The collections analyst dashboard: AG Studio with ClearDue's three custom widgets, a theme matching the rest of the
 // app, a default report, and the analyst agent (a Client Tool Runner whose server side is /api/analyst/run).
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { AgStudioAiModule, clientToolRunner, createAiHarness, studioTheme, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
 import { AgStudio, AgStudioProvider, createWidgets } from "ag-studio-react";
 import type { DecisionRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
@@ -18,6 +18,8 @@ const theme = studioTheme.withParams({
   borderColor: "#e5e5e5",
   studioCanvasBackgroundColor: "#fafafa",
   studioAiPanelWidth: 320,
+  studioMinWidth: 320,
+  studioCanvasMinWidth: 320,
   studioPanelWidth: 230,
   studioCanvasFontFamily: "inherit",
   studioWidgetBackgroundColor: "#ffffff",
@@ -43,8 +45,8 @@ const widgets = createWidgets({ additionalTypes: CUSTOM_WIDGETS as never, menu: 
 const fieldsOf = (source: string, names: string[]) => names.map((n) => ({ id: `${source}.${n}` }));
 const title = (text: string, subtitle: string) => ({ title: { enabled: true, text }, subtitle: { enabled: true, text: subtitle } });
 
-/** The report Studio opens with: the three ClearDue widgets, laid out on the 24-column canvas. */
-const initialState = {
+/** The report Studio opens with: the three ClearDue widgets, laid out on the 24-column canvas (stacked on a phone). */
+const initialStateFor = (narrow: boolean) => ({
   selectedPageId: PAGE,
   pages: [
     {
@@ -54,14 +56,20 @@ const initialState = {
         decisions: { type: "decisions", dataMapping: { fields: fieldsOf("decisions", ["client", "action", "verdict", "outcome", "reasons", "date"]) }, format: title("Mandate decisions", "The model proposes, the mandate decides") },
         plans: { type: "plans", dataMapping: { fields: fieldsOf("plans", ["client", "plan", "strategy", "part", "amount", "currency", "due", "status", "paid"]) }, format: title("Plan tracker", "Instalments paid and still to pay") },
       },
-      widgetLayout: {
-        owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 14 },
-        decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 24 },
-        plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 24 },
-      },
+      widgetLayout: narrow
+        ? {
+            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 20 },
+            decisions: { xTrack: 0, yTrack: 20, xSpan: 24, ySpan: 30 },
+            plans: { xTrack: 0, yTrack: 50, xSpan: 24, ySpan: 24 },
+          }
+        : {
+            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 14 },
+            decisions: { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 30 },
+            plans: { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 30 },
+          },
     },
   ],
-} as unknown as AgReportState;
+}) as unknown as AgReportState;
 
 /** POSTs the run input to our server and yields its NDJSON lines as AG-UI events. */
 async function* serverRun(input: AgAiRunInput, signal?: AbortSignal): AsyncGenerator<AgAiEvent> {
@@ -82,11 +90,18 @@ async function* serverRun(input: AgAiRunInput, signal?: AbortSignal): AsyncGener
   }
 }
 
+const NARROW = "(max-width: 767px)";
+const subscribeNarrow = (cb: () => void) => {
+  const mq = window.matchMedia(NARROW);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+};
+
 const text = "textFormat";
 const int = "integerFormat";
 const dec = "decimalFormat";
 
-export function AnalystStudio({ receivables, decisions, plans }: { receivables: ReceivableRow[]; decisions: DecisionRow[]; plans: PlanPartRow[] }) {
+export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { licenseKey?: string; receivables: ReceivableRow[]; decisions: DecisionRow[]; plans: PlanPartRow[] }) {
   const data = useMemo<AgDataSourcesDefinition>(
     () =>
       ({
@@ -141,8 +156,12 @@ export function AnalystStudio({ receivables, decisions, plans }: { receivables: 
   );
 
   // The widget editor is hidden until asked for, so the report gets the room; the AI panel is always there.
+  // On a phone the AI panel would fill the screen, so it opens only on request and the widget editor isn't offered.
   const [editing, setEditing] = useState(false);
-  const panels = useMemo(() => ({ edit: { left: ["ai"], right: editing ? ["edit"] : [] } }), [editing]);
+  const [asking, setAsking] = useState(false);
+  const narrow = useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW).matches, () => false);
+  const [initialState] = useState(() => initialStateFor(typeof window !== "undefined" && window.matchMedia(NARROW).matches));
+  const panels = useMemo(() => ({ edit: { left: !narrow || asking ? ["ai"] : [], right: editing && !narrow ? ["edit"] : [] } }), [editing, narrow, asking]);
 
   const ai = useMemo(
     () =>
@@ -171,12 +190,18 @@ export function AnalystStudio({ receivables, decisions, plans }: { receivables: 
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className="rounded-md border px-3 py-1 text-sm hover:bg-muted">
-          {editing ? "Done editing" : "Edit layout"}
-        </button>
+        {narrow ? (
+          <button type="button" onClick={() => setAsking((a) => !a)} aria-pressed={asking} className="rounded-md border px-3 py-1 text-sm hover:bg-muted">
+            {asking ? "Back to the report" : "Ask the analyst"}
+          </button>
+        ) : (
+          <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className="rounded-md border px-3 py-1 text-sm hover:bg-muted">
+            {editing ? "Done editing" : "Edit layout"}
+          </button>
+        )}
       </div>
-      <div className="h-[calc(100vh-12rem)] min-h-[640px]">
-      <AgStudioProvider modules={[AgStudioAiModule]}>
+      <div className={narrow ? "h-[1250px]" : "h-[calc(100vh-12rem)] min-h-[640px]"}>
+      <AgStudioProvider modules={[AgStudioAiModule]} licenseKey={licenseKey}>
         <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" panels={panels as never} data={data} initialState={initialState} widgets={widgets as never} theme={theme as never} ai={ai} />
       </AgStudioProvider>
       </div>
