@@ -2,6 +2,8 @@
 
 An AI collections agent for solo Indian freelancers who bill overseas clients through PayPal. ClearDue works out *why* a client hasn't paid (forgot, waiting on approval, short on cash, disputing the work, wrong contact) and takes the matching action, always inside limits the freelancer sets. Clients get an assistant on the pay page that answers questions from the agreed scope, with quotes.
 
+**Live demo:** <https://cleardue-6laj.onrender.com> (PayPal sandbox; the login is under [Testing instructions](#testing-instructions)).
+
 ![A client's pay page: invoice summary, Pay with PayPal, and a scope question answered with quoted citations](docs/screenshot-pay.png)
 
 ## The problem
@@ -158,7 +160,7 @@ npm run dev                   # http://localhost:3000
 
 ### Demo login
 
-Hosted demo: email `demo@cleardue.app`, password `judge-cleardue-2026`. This is a demo-only account shared by all judges, with sandbox PayPal only.
+Hosted demo: [cleardue-6laj.onrender.com](https://cleardue-6laj.onrender.com), email `demo@cleardue.app`, password `judge-cleardue-2026`. This is a demo-only account shared by all judges, with sandbox PayPal only.
 
 Locally, sign in with `DEMO_EMAIL` / `DEMO_PASSWORD` from `.env`. When `DEMO_MODE=true` or `PAYPAL_MODE=mock`, the login page shows these credentials and fills them in. After sign-in, **Start here** walks through the three demo stories (Acme, Brightside, Koala); it can be dismissed and stays in the menu.
 
@@ -206,7 +208,7 @@ Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`)
 
 For judges (also pasted into Devpost):
 
-1. Open the hosted demo and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox: every invoice and payment is fake money, and no real money moves.
+1. Open the hosted demo, <https://cleardue-6laj.onrender.com>, and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox: every invoice and payment is fake money, and no real money moves.
 
    To pay as the client, use the shared PayPal sandbox buyer account: email `SANDBOX_BUYER_EMAIL`, password `SANDBOX_BUYER_PASSWORD` (placeholders until the account is set up). It is a sandbox-only personal account with fake money; it works only on sandbox.paypal.com, not on real PayPal.
 2. You land on **Start here**, with three stories, each about a minute:
