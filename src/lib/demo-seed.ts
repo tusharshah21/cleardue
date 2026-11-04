@@ -4,6 +4,7 @@ import { DEFAULT_MANDATE } from "@/agent/mandate";
 import { isMockMode } from "@/paypal/client";
 import { cancelInvoice, deleteDraftInvoice, type LineItem } from "@/paypal/invoices";
 import { createHash } from "node:crypto";
+import { markNow } from "./app-state";
 import { db } from "./db";
 import { createAndSendInvoice, lineTotal, newPayToken } from "./invoicing";
 
@@ -188,6 +189,16 @@ export async function resetDemo({ withPayPal }: { withPayPal: boolean }) {
     }
     seeded.push(`${client.name}: invoice ${invoice.paypalInvoiceId ?? "(local only)"} ${invoice.status}`);
   }
+  // A fourth client with a finished history (a diagnosis, mandate decisions, a paid plan) so the analyst's widgets have data.
+  // Decoration only: if it fails, the three stories above are still a good demo.
+  if (withPayPal) {
+    try {
+      const { seedHistory } = await import("./demo-history");
+      seeded.push(await seedHistory({ freelancer, clientEmail: clientEmail("northwind") }));
+    } catch (e) {
+      console.warn("Demo history not seeded:", e instanceof Error ? e.message : e);
+    }
+  }
   // Cached AI results stay across a reset while the stories are unchanged; ones made under other stories are stale.
   await db.aiCache.deleteMany({ where: { freelancerId: freelancer.id, NOT: { seed: seedFingerprint() } } });
   return { freelancerId: freelancer.id, closed, seeded };
@@ -218,6 +229,7 @@ export async function dailyDemoReset(now = new Date()) {
   const last = await lastDemoReset();
   if (last && last >= lastScheduledReset(now)) return false;
   await resetDemo({ withPayPal: resetViaPayPal() });
+  await markNow("lastDailyResetAt");
   return true;
 }
 

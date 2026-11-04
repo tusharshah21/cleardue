@@ -13,6 +13,8 @@ const calls = (...c: [string, Record<string, unknown>][]): LanguageModelV4Conten
 
 const ACME = "waiting on finance sign-off";
 const BRIGHTSIDE = "Cash is tight this month";
+/** The seeded history client (src/lib/demo-history.ts): its reply, and the recorded diagnosis and proposals for it. */
+export const NORTHWIND = "Cash is tight at the studio this quarter";
 /** The demo's scope-check request for Acme. */
 export const ACME_EXTRA = "Could you also build the dashboard in React?";
 /** A plan request on a pay page (any client). */
@@ -86,6 +88,44 @@ export const DEMO_FIXTURES: Fixture[] = [
         },
       ]),
       text("Proposed a two-part payment plan within the mandate."),
+    ],
+  },
+  {
+    task: CLASSIFY,
+    match: NORTHWIND,
+    steps: [
+      text({
+        reason: "cash_constraint",
+        confidence: 0.9,
+        evidence: ["Cash is tight at the studio this quarter", "could we split it"],
+        promisedDate: null,
+        approverEmail: null,
+        summary: "Northwind wants to pay but is short on cash this quarter and is asking to split the invoice.",
+      }),
+    ],
+  },
+  {
+    // Three proposals in one step, so the mandate shows all three outcomes: the plan is within the mandate, the friendly
+    // note lands in the client's quiet hours (held for approval), and the firm note is above the tone ceiling (blocked).
+    task: PROPOSE,
+    match: NORTHWIND,
+    steps: [
+      calls(
+        ["send_message", { to: "client", tone: "friendly", subject: "Splitting the invoice", body: "Hi, thanks for letting me know. I'm happy to split it into two parts; the plan is on its way." }],
+        ["send_message", { to: "client", tone: "firm", subject: "Overdue invoice", body: "This invoice is overdue. Please pay the full amount today." }],
+        [
+          "offer_payment_plan",
+          {
+            instalments: [
+              { amount: "{{suggested_split.0}}", due_date: "{{tomorrow}}" },
+              { amount: "{{suggested_split.1}}", due_date: "{{in_30_days}}" },
+            ],
+            tone: "friendly",
+            message: "Hi, of course. How about {{currency}} {{suggested_split.0}} now and {{currency}} {{suggested_split.1}} on {{in_30_days}}? You can accept the plan here: {{pay_link}}. Thanks, Aarav",
+          },
+        ],
+      ),
+      text("Offered a two-part plan within the mandate; the friendly note waits for approval and the firm note was blocked."),
     ],
   },
   {

@@ -219,3 +219,8 @@ model WebhookEvent {
   payload    Json
   receivedAt DateTime @default(now())
 }
+// Small facts about the running system (last scheduled sync, last daily reset), so a missing cron is visible.
+model AppState {
+  key String   @id
+  at  DateTime
+}

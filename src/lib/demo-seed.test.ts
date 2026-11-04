@@ -25,10 +25,12 @@ vi.mock("@/lib/db", () => {
       },
       project: { create: async ({ data }: { data: Record<string, unknown> }) => row(data) },
       message: { create: async () => ({}) },
+      appState: { upsert: async ({ create }: { create: { key: string } }) => h.calls.push(`appState:${create.key}`) },
       aiCache: { deleteMany: async ({ where }: { where: unknown }) => h.calls.push(`aiCache.deleteMany:${JSON.stringify(where)}`) },
     },
   };
 });
+vi.mock("./demo-history", () => ({ seedHistory: async () => "Northwind Media: history (mocked)" }));
 vi.mock("@/paypal/invoices", () => ({
   cancelInvoice: async (id: string) => h.calls.push(`cancel:${id}`),
   deleteDraftInvoice: async (id: string) => h.calls.push(`delete:${id}`),
@@ -73,6 +75,7 @@ describe("dailyDemoReset", () => {
     h.oldest = new Date("2026-11-03T02:59:00Z"); // a manual reset just before the slot doesn't count
     expect(await dailyDemoReset(now)).toBe(true);
     expect(h.calls).toContain("cancel:INV2-OPEN");
+    expect(h.calls).toContain("appState:lastDailyResetAt"); // so a skipped daily reset shows up in /api/health/db
   });
 
   it("waits for 03:00 UTC: at 02:00 yesterday's slot still stands", async () => {
