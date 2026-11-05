@@ -203,3 +203,28 @@ describe("noReply", () => {
     expect(d.summary).toContain("9 days overdue");
   });
 });
+
+describe("text in another script never reaches users", () => {
+  const BAD = "I предложed a two-part payment plan and sent the client a matching message.";
+  const GOOD = "I proposed a two-part payment plan and sent the client a matching message.";
+
+  it("retries a note that mixes in Cyrillic, then uses the clean second answer", async () => {
+    const r = await run(ctx(), [[{ type: "text", text: BAD }], [{ type: "text", text: GOOD }]]);
+    expect(r.model.doGenerateCalls).toHaveLength(2);
+    expect(r.result.rationale).toBe(GOOD);
+  });
+
+  it("falls back to a plain sentence when the retry is foreign too", async () => {
+    const r = await run(ctx(), [[{ type: "text", text: BAD }], [{ type: "text", text: BAD }]]);
+    expect(r.result.rationale).toBe("I reviewed the client's reply and queued the next step for you.");
+  });
+
+  it("refuses foreign wording in a tool call once (nothing recorded), then swaps in a template on the second", async () => {
+    const bad = { ...nudge, body: "Привет, here is the link again. Aarav" };
+    const r = await run(ctx(), [[call("send_message", bad)], [call("send_message", bad)], [{ type: "text", text: "Sent." }]]);
+    expect(r.recorded).toHaveLength(1);
+    expect(r.recorded[0].input.body).not.toMatch(/Привет/);
+    expect(r.executed).toEqual(["send_message"]);
+    expect(JSON.stringify(r.model.doGenerateCalls[1].prompt)).toContain("Latin letters only");
+  });
+});

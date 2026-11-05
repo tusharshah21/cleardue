@@ -4,6 +4,7 @@ import type { z } from "zod";
 import { readCache, writeCache, type CacheRequest } from "./cache";
 import { ANSWER_BUDGET_MS, Budget } from "./budget";
 import { providerOf, wasReplayed } from "./replay";
+import { hasForeignScript } from "@/lib/script-guard";
 
 /** Cap per model call (each task retries at most once). */
 export const AI_TIMEOUT_MS = 20_000;
@@ -33,7 +34,7 @@ export async function structured<S extends z.ZodType>(opts: {
 }): Promise<StructuredResult<z.infer<S>>> {
   if (opts.cache) {
     const hit = opts.schema.safeParse(await readCache(opts.model, opts.cache));
-    if (hit.success) return { value: hit.data, fallback: false, replayed: false, cached: true };
+    if (hit.success && !hasForeignScript(hit.data)) return { value: hit.data, fallback: false, replayed: false, cached: true };
   }
   let lastError = "";
   const budget = opts.budget ?? new Budget(ANSWER_BUDGET_MS);
@@ -53,6 +54,8 @@ export async function structured<S extends z.ZodType>(opts: {
       });
       // Output.object validates already; parse again so the return type is the schema's, not the SDK's.
       const value = opts.schema.parse(output);
+      // Another script inside the text counts as a failed attempt: retry once, then the caller's safe fallback. Never cached.
+      if (hasForeignScript(value)) throw new Error("the answer contained letters outside the Latin script");
       const replayed = wasReplayed(steps);
       if (opts.cache && !replayed) await writeCache(opts.model, opts.cache, value);
       return { value, fallback: false, replayed, cached: false, provider: replayed ? undefined : providerOf(steps) };

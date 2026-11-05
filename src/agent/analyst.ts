@@ -12,7 +12,8 @@ import { describeProposal, REASON_LABELS, STATUS_LABELS } from "@/lib/proposals"
 import { daysOverdue, isOpen } from "@/lib/receivables";
 import { gateContext, loadInvoice, timeline } from "./cases";
 import { checkAction, type MandateResult } from "./mandate";
-import { draftOf, LOCAL_TOOLS, toAction } from "./tools";
+import { hasForeignScript } from "@/lib/script-guard";
+import { draftOf, LOCAL_TOOLS, toAction, withSafeText } from "./tools";
 
 type Input = Record<string, unknown>;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -172,11 +173,23 @@ export async function proposeFromAnalyst(
 
 /** The analyst agent's server-side tools (run inside the route's model loop). Everything is scoped to the freelancer. */
 export function analystTools(freelancerId: string): ToolSet {
+  const textRetries = new Set<string>();
   const write = (name: (typeof ANALYST_TOOLS)[number]) =>
     tool({
       description: `${LOCAL_TOOLS[name].description} This only PROPOSES: the freelancer approves it on the Approvals page before anything is sent or changed. invoice is a client name or the invoice id from get_receivables.`,
       inputSchema: z.object({ invoice: z.string().min(1).describe("Client name or invoice id of an open invoice") }).extend((LOCAL_TOOLS[name].schema as z.ZodObject<z.ZodRawShape>).shape) as unknown as z.ZodType<Input>,
-      execute: async ({ invoice, ...input }: Input) => proposeFromAnalyst(freelancerId, { invoice: String(invoice), tool: name, input }),
+      execute: async ({ invoice, ...rawInput }: Input) => {
+        let input = rawInput;
+        if (hasForeignScript(input)) {
+          // The model gets one retry per tool; after that the wording is replaced with a plain template sentence.
+          if (!textRetries.has(name)) {
+            textRetries.add(name);
+            return { status: "error", error: "The text must be plain English written in Latin letters only. Rewrite it and call the tool again." } satisfies AnalystProposal;
+          }
+          input = withSafeText(name, input);
+        }
+        return proposeFromAnalyst(freelancerId, { invoice: String(invoice), tool: name, input });
+      },
     });
   return {
     get_receivables: tool({ description: "Open invoices: client, outstanding amount, days overdue, diagnosed reason, next action. One row per open invoice.", inputSchema: z.object({}), execute: () => receivablesFor(freelancerId) }),

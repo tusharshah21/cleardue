@@ -7,6 +7,7 @@ import { jsonSchema, tool, type ToolSet } from "ai";
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import { z } from "zod";
 import { toMinor } from "@/lib/money";
+import { hasForeignScript, TEMPLATE } from "@/lib/script-guard";
 import { checkAction, Tone, type AgentAction, type MandateContext, type MandateResult } from "./mandate";
 import { TOOLKIT_TOOLS, toolkitTools, type ToolkitToolName } from "./toolkit";
 
@@ -48,7 +49,24 @@ export type LocalToolName = keyof typeof LOCAL_TOOLS;
 export type AgentToolName = LocalToolName | ToolkitToolName;
 export const AGENT_TOOL_NAMES: AgentToolName[] = [...(Object.keys(LOCAL_TOOLS) as LocalToolName[]), ...TOOLKIT_TOOLS];
 
+/** Replacement text per field when a tool call's wording is not in Latin letters even after the model retried. */
+const SAFE_TEXT: Record<string, Record<string, string>> = {
+  send_message: { subject: TEMPLATE.subject, body: TEMPLATE.message },
+  send_invoice_reminder: { note: TEMPLATE.message },
+  offer_payment_plan: { message: TEMPLATE.planMessage },
+  pause_reminders: { reason: TEMPLATE.pauseReason },
+  escalate_dispute: { summary: TEMPLATE.summary },
+};
+
+/** Swaps every field of a tool call that is not in Latin letters for a plain template sentence. */
+export function withSafeText(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
+  const safe = SAFE_TEXT[toolName] ?? {};
+  return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, hasForeignScript(v) ? (safe[k] ?? TEMPLATE.note) : v]));
+}
+
 export interface GateContext {
+  /** Tools whose wording already had to be rewritten once in this run (the model gets one retry). */
+  textRetries?: Set<string>;
   mandate: MandateContext;
   currency: string;
   approverEmail: string | null;
@@ -128,7 +146,18 @@ export type ToolOutcome =
   | { status: "denied"; reasons: string[] }
   | { status: "failed"; error: string };
 
-export async function gate(toolName: string, input: Input, ctx: GateContext, hooks: GateHooks): Promise<ToolOutcome> {
+export async function gate(toolName: string, rawInput: Input, ctx: GateContext, hooks: GateHooks): Promise<ToolOutcome> {
+  let input = rawInput;
+  if (hasForeignScript(input)) {
+    ctx.textRetries ??= new Set();
+    if (!ctx.textRetries.has(toolName)) {
+      // First time: nothing is recorded or run; the model is told to rewrite the wording.
+      ctx.textRetries.add(toolName);
+      return { status: "failed", error: "The text must be plain English written in Latin letters only. Rewrite it and call the tool again." };
+    }
+    // Second time: swap every non-Latin field for a plain template sentence and carry on.
+    input = withSafeText(toolName, input);
+  }
   let action: AgentAction | null = null;
   let result: MandateResult;
   try {

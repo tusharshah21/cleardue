@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import type { LanguageModel } from "ai";
 import { db } from "@/lib/db";
+import { hasForeignScript } from "@/lib/script-guard";
 
 export interface CacheScope {
   freelancerId: string;
@@ -34,6 +35,7 @@ export async function readCache(model: LanguageModel, req: CacheRequest): Promis
   if (!req.scope) return undefined;
   try {
     const row = await db.aiCache.findUnique({ where: { freelancerId_key: { freelancerId: req.scope.freelancerId, key: cacheKey(model, req) } } });
+    if (row && hasForeignScript(row.output)) return undefined; // an entry written before the guard existed
     return row?.output ?? undefined;
   } catch {
     return undefined; // a cache problem must never break the call itself
@@ -41,7 +43,7 @@ export async function readCache(model: LanguageModel, req: CacheRequest): Promis
 }
 
 export async function writeCache(model: LanguageModel, req: CacheRequest, output: unknown) {
-  if (!req.scope) return;
+  if (!req.scope || hasForeignScript(output)) return;
   const key = cacheKey(model, req);
   try {
     await db.aiCache.upsert({
@@ -52,4 +54,18 @@ export async function writeCache(model: LanguageModel, req: CacheRequest, output
   } catch {
     // ignored: the result is still returned, just not stored
   }
+}
+
+/** Maintenance: delete cached AI results that contain non-Latin letters (always) and, with `all`, every cached result.
+ * Returns how many rows were removed. */
+export async function clearAiCache(opts: { all?: boolean } = {}): Promise<{ removed: number; foreign: number }> {
+  const rows = await db.aiCache.findMany({ select: { id: true, output: true } });
+  const foreign = rows.filter((r) => hasForeignScript(r.output)).map((r) => r.id);
+  if (opts.all) {
+    const res = await db.aiCache.deleteMany({});
+    return { removed: res.count, foreign: foreign.length };
+  }
+  if (!foreign.length) return { removed: 0, foreign: 0 };
+  const res = await db.aiCache.deleteMany({ where: { id: { in: foreign } } });
+  return { removed: res.count, foreign: foreign.length };
 }

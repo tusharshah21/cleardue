@@ -6,6 +6,7 @@ import * as prompt from "./prompts/propose-action";
 import { Budget, DIAGNOSE_BUDGET_MS } from "./budget";
 import { providerOf, wasReplayed } from "./replay";
 import { AI_TIMEOUT_MS } from "./structured";
+import { hasForeignScript, TEMPLATE } from "@/lib/script-guard";
 
 export interface ProposeResult {
   rationale: string;
@@ -37,7 +38,16 @@ export async function proposeAction(
         abortSignal: budget.signal(AI_TIMEOUT_MS),
         maxRetries: 0,
       });
-      return { rationale: result.text.trim(), replayed: wasReplayed(result.steps), provider: providerOf(result.steps) };
+      let rationale = result.text.trim();
+      if (hasForeignScript(rationale)) {
+        // Retry once while nothing has run yet; otherwise (or on the second try) a plain sentence stands in.
+        if (attempt === 0 && toolCallsSoFar() === 0) {
+          error = "the note contained letters outside the Latin script";
+          continue;
+        }
+        rationale = TEMPLATE.note;
+      }
+      return { rationale, replayed: wasReplayed(result.steps), provider: providerOf(result.steps) };
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       if (toolCallsSoFar() > 0) break;

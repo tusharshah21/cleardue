@@ -16,6 +16,7 @@
     "test:mandate": "vitest run --coverage --coverage.include=src/agent/mandate.ts src/agent/mandate.test.ts",
     "paypal:webhook": "tsx scripts/paypal-webhook.mts",
     "eval": "tsx scripts/eval.mts",
+    "cache:clear": "tsx scripts/clear-ai-cache.mts",
     "ai:compare": "tsx --conditions=react-server scripts/ai-compare.mts"
   },
   "dependencies": {

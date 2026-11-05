@@ -7,6 +7,7 @@ import { providerName } from "@/lib/provider-name";
 import { analystTools } from "@/agent/analyst";
 import { requireFreelancer } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import { hasForeignScript, TEMPLATE } from "@/lib/script-guard";
 
 export const maxDuration = 60;
 
@@ -30,30 +31,40 @@ export async function POST(req: Request) {
       const id = crypto.randomUUID();
       let open = false;
       try {
-        const result = streamText({
-          model: getModel(),
-          system: SYSTEM,
-          messages,
-          tools: analystTools(freelancer.id),
-          stopWhen: isStepCount(6),
-          // The whole turn (steps, retries, failover) gets one allowance; running out ends it with a readable message.
-          abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(ANSWER_BUDGET_MS)]),
-          maxRetries: 0,
-        });
-        for await (const part of result.fullStream) {
-          if (part.type === "text-delta" && part.text) {
-            if (!open) {
-              send({ type: "TEXT_MESSAGE_START", messageId: id, role: "assistant" });
-              open = true;
-            }
-            send({ type: "TEXT_MESSAGE_CONTENT", messageId: id, delta: part.text });
-          } else if (part.type === "error") {
-            throw part.error instanceof Error ? part.error : new Error(String(part.error));
+        // The answer is read to the end before it is sent, so text in another script can be caught: one fresh try (only
+        // if no tool ran, so nothing is proposed twice), then a plain sentence.
+        const run = async () => {
+          const result = streamText({
+            model: getModel(),
+            system: SYSTEM,
+            messages,
+            tools: analystTools(freelancer.id),
+            stopWhen: isStepCount(6),
+            // The whole turn (steps, retries, failover) gets one allowance; running out ends it with a readable message.
+            abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(ANSWER_BUDGET_MS)]),
+            maxRetries: 0,
+          });
+          let text = "";
+          for await (const part of result.fullStream) {
+            if (part.type === "text-delta" && part.text) text += part.text;
+            else if (part.type === "error") throw part.error instanceof Error ? part.error : new Error(String(part.error));
           }
+          const steps = await result.steps;
+          return { text, steps, ranTools: steps.some((s) => s.toolCalls.length > 0) };
+        };
+        let out = await run();
+        if (hasForeignScript(out.text) && !out.ranTools) out = await run();
+        const clean = hasForeignScript(out.text) ? { ...out, text: TEMPLATE.analyst } : out;
+        if (clean.text) {
+          send({ type: "TEXT_MESSAGE_START", messageId: id, role: "assistant" });
+          open = true;
+          send({ type: "TEXT_MESSAGE_CONTENT", messageId: id, delta: clean.text });
         }
         // Say which provider actually produced the answer (after any failover); recorded answers carry no provider.
-        const provider = open ? providerOf(await result.steps) : undefined;
-        if (provider) send({ type: "TEXT_MESSAGE_CONTENT", messageId: id, delta: `\n\n(Answered by ${providerName(provider)})` });
+        const provider = open ? providerOf(clean.steps) : undefined;
+        if (provider) send({ type: "TEXT_MESSAGE_CONTENT", messageId: id, delta: `
+
+(Answered by ${providerName(provider)})` });
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });
       } catch (e) {
         if (open) send({ type: "TEXT_MESSAGE_END", messageId: id });
