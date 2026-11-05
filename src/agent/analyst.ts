@@ -10,10 +10,10 @@ import { db } from "@/lib/db";
 import { fromMinor } from "@/lib/money";
 import { describeProposal, REASON_LABELS, STATUS_LABELS } from "@/lib/proposals";
 import { daysOverdue, isOpen } from "@/lib/receivables";
-import { gateContext, loadInvoice, timeline } from "./cases";
+import { gateContext, loadInvoice, payLink, timeline } from "./cases";
 import { checkAction, type MandateResult } from "./mandate";
-import { hasForeignScript } from "@/lib/script-guard";
-import { draftOf, LOCAL_TOOLS, toAction, withSafeText } from "./tools";
+import { needsRewrite } from "@/lib/script-guard";
+import { draftOf, LOCAL_TOOLS, rewriteHint, toAction, withSafeText } from "./tools";
 
 type Input = Record<string, unknown>;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -26,6 +26,8 @@ export interface ReceivableRow {
   invoice: string;
   /** For a plan part, the number of the invoice the plan replaced. */
   planPartOf: string | null;
+  /** The client's real pay page link, for drafting messages. */
+  payLink: string;
   currency: string;
   outstanding: number;
   daysOverdue: number;
@@ -73,6 +75,7 @@ export async function receivablesFor(freelancerId: string, now = new Date()): Pr
         invoiceId: i.id,
         client: i.client.name,
         invoice: label,
+        payLink: payLink(i),
         planPartOf: isPart ? (numberOf.get(i.planGroup!.originalInvoiceId) ?? null) : null,
         currency: i.currency,
         outstanding: Number(fromMinor(i.totalMinor - i.paidMinor, i.currency)),
@@ -140,7 +143,7 @@ export type AnalystProposal =
  * downgraded to "needs your approval". Deny stays deny. Approving it later re-checks the mandate (approveProposal). */
 export async function proposeFromAnalyst(
   freelancerId: string,
-  args: { invoice: string; tool: (typeof ANALYST_TOOLS)[number]; input: Record<string, unknown> },
+  args: { invoice: string; tool: (typeof ANALYST_TOOLS)[number]; input: Record<string, unknown>; /** Second try with bad wording: use the plain template. */ safeText?: boolean },
   now = new Date(),
 ): Promise<AnalystProposal> {
   const needle = args.invoice.trim().toLowerCase();
@@ -151,6 +154,7 @@ export async function proposeFromAnalyst(
   }
   const invoice = await loadInvoice(matches[0].id, freelancerId);
   const kase = await db.case.upsert({ where: { invoiceId: invoice.id }, create: { invoiceId: invoice.id, state: "open" }, update: {} });
+  if (args.safeText) args = { ...args, input: withSafeText(args.tool, args.input, { freelancerName: invoice.client.freelancer.name, payLink: payLink(invoice), invoiceNumber: invoice.invoiceNumber }) };
   // The analyst's confidence is not the diagnosis' confidence, so a case nobody diagnosed isn't blocked by a 0.
   const ctx = gateContext(invoice, { state: kase.state, confidence: kase.confidence ?? 1 }, now);
   let result: MandateResult;
@@ -190,16 +194,16 @@ export function analystTools(freelancerId: string): ToolSet {
       description: `${LOCAL_TOOLS[name].description} This only PROPOSES: the freelancer approves it on the Approvals page before anything is sent or changed. invoice is a client name or the invoice id from get_receivables.`,
       inputSchema: z.object({ invoice: z.string().min(1).describe("Client name or invoice id of an open invoice") }).extend((LOCAL_TOOLS[name].schema as z.ZodObject<z.ZodRawShape>).shape) as unknown as z.ZodType<Input>,
       execute: async ({ invoice, ...rawInput }: Input) => {
-        let input = rawInput;
-        if (hasForeignScript(input)) {
-          // The model gets one retry per tool; after that the wording is replaced with a plain template sentence.
+        let safeText = false;
+        if (needsRewrite(rawInput)) {
+          // The model gets one retry per tool; after that the wording is replaced with a plain template (real name and pay link).
           if (!textRetries.has(name)) {
             textRetries.add(name);
-            return { status: "error", error: "The text must be plain English written in Latin letters only. Rewrite it and call the tool again." } satisfies AnalystProposal;
+            return { status: "error", error: rewriteHint(rawInput) } satisfies AnalystProposal;
           }
-          input = withSafeText(name, input);
+          safeText = true;
         }
-        return proposeFromAnalyst(freelancerId, { invoice: String(invoice), tool: name, input });
+        return proposeFromAnalyst(freelancerId, { invoice: String(invoice), tool: name, input: rawInput, safeText });
       },
     });
   return {

@@ -7,6 +7,7 @@ import * as payerPrompt from "./prompts/payer-assistant";
 import * as scopePrompt from "./prompts/scope-check";
 import { ClassifyReplySchema, PayerAnswerSchema, ScopeCheckSchema, type ClassifyReply, type PayerAnswer, type ScopeCheck } from "./schemas";
 import { mentionsPaymentRail } from "@/lib/payment-rails";
+import { hasPlaceholder } from "@/lib/script-guard";
 import { structured, type StructuredResult } from "./structured";
 
 export interface ThreadMessage {
@@ -106,6 +107,8 @@ export function groundAnswer(a: PayerAnswer, sources: PayerSources, freelancerNa
   const citations = a.citations.filter((c) => norm(sources[c.source]).includes(norm(c.quote).replace(/^["']|["']$/g, "")));
   if (a.escalate) return { ...a, citations };
   // The pay page never discusses bank details or another way to pay on its own: that is the freelancer's call (an escalated refusal is fine).
+  // A bracketed placeholder in a client-facing answer is never sent.
+  if (hasPlaceholder(a.answer)) return { ...escalated(freelancerName, "answer contained a bracketed placeholder"), complaint: a.complaint, wantsPlan: a.wantsPlan };
   if (mentionsPaymentRail(a.answer)) return { ...escalated(freelancerName, "the client asked about paying outside the PayPal invoice"), complaint: a.complaint, wantsPlan: a.wantsPlan };
   const known = new Set((Object.values(sources).join("\n").match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(numberOf));
   const invented = (a.answer.match(FIGURES) ?? []).filter((f) => !known.has(numberOf(f)));

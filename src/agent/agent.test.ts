@@ -228,3 +228,26 @@ describe("text in another script never reaches users", () => {
     expect(JSON.stringify(r.model.doGenerateCalls[1].prompt)).toContain("Latin letters only");
   });
 });
+
+describe("placeholders in client messages", () => {
+  const withPlaceholders = { ...nudge, body: "Hi Dana, pay here: [Pay invoice 0159]. Thanks, [Your name]" };
+  const safe = { freelancerName: "Aarav Mehta", payLink: "https://x.test/pay/tok", invoiceNumber: "0159" };
+
+  it("refuses the draft once and says what to do, then a template with the real name and link goes through", async () => {
+    const c = { ...ctx(), safe };
+    const r = await run(c, [[call("send_message", withPlaceholders)], [call("send_message", withPlaceholders)], [{ type: "text", text: "Sent." }]]);
+    expect(JSON.stringify(r.model.doGenerateCalls[1].prompt)).toContain("Aarav Mehta");
+    expect(r.recorded).toHaveLength(1);
+    const body = String(r.recorded[0].input.body);
+    expect(body).toContain("https://x.test/pay/tok");
+    expect(body).toContain("Aarav Mehta");
+    expect(body).not.toMatch(/\[/);
+  });
+
+  it("accepts a retry that fixes the placeholders", async () => {
+    const fixed = { ...nudge, body: "Hi Dana, pay here: https://x.test/pay/tok. Thanks, Aarav Mehta" };
+    const r = await run({ ...ctx(), safe }, [[call("send_message", withPlaceholders)], [call("send_message", fixed)], [{ type: "text", text: "Sent." }]]);
+    expect(r.recorded).toHaveLength(1);
+    expect(r.recorded[0].input.body).toBe(fixed.body);
+  });
+});

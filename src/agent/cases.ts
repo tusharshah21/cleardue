@@ -39,7 +39,7 @@ export async function loadInvoice(invoiceId: string, freelancerId: string): Prom
 const toThread = (messages: Message[]): ThreadMessage[] =>
   messages.map((m) => ({ from: m.direction === "INBOUND" ? "client" : "freelancer", at: m.sentAt, body: m.body }));
 
-const payLink = (invoice: Invoice) => `${appUrl()}/pay/${invoice.payToken}`;
+export const payLink = (invoice: Invoice) => `${appUrl()}/pay/${invoice.payToken}`;
 
 export async function timeline(invoiceId: string, caseId: string | null, kind: string, summary: string, data?: unknown) {
   await db.timelineEvent.create({ data: { invoiceId, caseId, kind, summary, ...(data !== undefined && { data: json(data) }) } });
@@ -62,7 +62,7 @@ export function gateContext(invoice: FullInvoice, c: { state: string; confidence
       dueDate: invoice.dueDate,
     },
   };
-  return { mandate, currency: invoice.currency, approverEmail: client.approverEmail };
+  return { mandate, currency: invoice.currency, approverEmail: client.approverEmail, safe: { freelancerName: client.freelancer.name, payLink: payLink(invoice), invoiceNumber: invoice.invoiceNumber } };
 }
 
 function buildFacts(invoice: FullInvoice, ctx: GateContext, promisedDate: string | null, now: Date): Facts {

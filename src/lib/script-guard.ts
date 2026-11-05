@@ -11,6 +11,32 @@ export function hasForeignScript(value: unknown): boolean {
   return false;
 }
 
+// A bracketed stand-in such as "[Your name]", "[link]" or "[Pay invoice 0159]" left in a message meant to be sent as it is.
+const PLACEHOLDER = /\[[^\]\r\n]{1,60}\]/;
+
+/** True when any string inside `value` contains a bracketed placeholder. */
+export function hasPlaceholder(value: unknown): boolean {
+  if (typeof value === "string") return PLACEHOLDER.test(value);
+  if (Array.isArray(value)) return value.some(hasPlaceholder);
+  if (value && typeof value === "object") return Object.values(value).some(hasPlaceholder);
+  return false;
+}
+
+/** Text that must be rewritten before anyone sees it: another script, or a placeholder left in. */
+export const needsRewrite = (value: unknown) => hasForeignScript(value) || hasPlaceholder(value);
+
+export interface SafeContext {
+  freelancerName?: string;
+  payLink?: string;
+  invoiceNumber?: string | null;
+}
+
+/** The plain message used when two tries still contain a placeholder or another script: real name, real pay link. */
+export function templateMessage(ctx: SafeContext = {}): string {
+  const invoice = ctx.invoiceNumber ? `invoice ${ctx.invoiceNumber}` : "your invoice";
+  return `Hi, a quick note about ${invoice}.${ctx.payLink ? ` You can pay or ask questions here: ${ctx.payLink}.` : ""} Thanks!${ctx.freelancerName ? ` ${ctx.freelancerName}` : ""}`;
+}
+
 /** Plain, neutral sentences used when a retry still produced a foreign script. */
 export const TEMPLATE = {
   note: "I reviewed the client's reply and queued the next step for you.",

@@ -7,7 +7,7 @@ import { jsonSchema, tool, type ToolSet } from "ai";
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import { z } from "zod";
 import { toMinor } from "@/lib/money";
-import { hasForeignScript, TEMPLATE } from "@/lib/script-guard";
+import { needsRewrite, hasPlaceholder, templateMessage, TEMPLATE, type SafeContext } from "@/lib/script-guard";
 import { checkAction, Tone, type AgentAction, type MandateContext, type MandateResult } from "./mandate";
 import { TOOLKIT_TOOLS, toolkitTools, type ToolkitToolName } from "./toolkit";
 
@@ -49,24 +49,34 @@ export type LocalToolName = keyof typeof LOCAL_TOOLS;
 export type AgentToolName = LocalToolName | ToolkitToolName;
 export const AGENT_TOOL_NAMES: AgentToolName[] = [...(Object.keys(LOCAL_TOOLS) as LocalToolName[]), ...TOOLKIT_TOOLS];
 
-/** Replacement text per field when a tool call's wording is not in Latin letters even after the model retried. */
-const SAFE_TEXT: Record<string, Record<string, string>> = {
-  send_message: { subject: TEMPLATE.subject, body: TEMPLATE.message },
-  send_invoice_reminder: { note: TEMPLATE.message },
+/** Replacement text per field when a tool call's wording still has a placeholder or another script after the model retried. */
+const safeText = (ctx: SafeContext): Record<string, Record<string, string>> => ({
+  send_message: { subject: TEMPLATE.subject, body: templateMessage(ctx) },
+  send_invoice_reminder: { note: templateMessage(ctx) },
   offer_payment_plan: { message: TEMPLATE.planMessage },
   pause_reminders: { reason: TEMPLATE.pauseReason },
   escalate_dispute: { summary: TEMPLATE.summary },
-};
+});
 
-/** Swaps every field of a tool call that is not in Latin letters for a plain template sentence. */
-export function withSafeText(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
-  const safe = SAFE_TEXT[toolName] ?? {};
-  return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, hasForeignScript(v) ? (safe[k] ?? TEMPLATE.note) : v]));
+/** Swaps every field of a tool call that has a placeholder or non-Latin letters for a plain template sentence. */
+export function withSafeText(toolName: string, input: Record<string, unknown>, ctx: SafeContext = {}): Record<string, unknown> {
+  const safe = safeText(ctx)[toolName] ?? {};
+  return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, needsRewrite(v) ? (safe[k] ?? TEMPLATE.note) : v]));
+}
+
+/** What the model is told when its wording is refused (once), so the second try can be right. */
+export function rewriteHint(input: unknown, ctx: SafeContext = {}): string {
+  if (hasPlaceholder(input)) {
+    return `Do not leave bracketed placeholders such as [Your name] or [link] in a message. Sign it as ${ctx.freelancerName ?? "the freelancer"} and write the real pay link${ctx.payLink ? ` ${ctx.payLink}` : ""} in full. Rewrite and call the tool again.`;
+  }
+  return "The text must be plain English written in Latin letters only. Rewrite it and call the tool again.";
 }
 
 export interface GateContext {
   /** Tools whose wording already had to be rewritten once in this run (the model gets one retry). */
   textRetries?: Set<string>;
+  /** The freelancer's name and the invoice's pay link, for the plain template and the retry hint. */
+  safe?: SafeContext;
   mandate: MandateContext;
   currency: string;
   approverEmail: string | null;
@@ -148,15 +158,15 @@ export type ToolOutcome =
 
 export async function gate(toolName: string, rawInput: Input, ctx: GateContext, hooks: GateHooks): Promise<ToolOutcome> {
   let input = rawInput;
-  if (hasForeignScript(input)) {
+  if (needsRewrite(input)) {
     ctx.textRetries ??= new Set();
     if (!ctx.textRetries.has(toolName)) {
       // First time: nothing is recorded or run; the model is told to rewrite the wording.
       ctx.textRetries.add(toolName);
-      return { status: "failed", error: "The text must be plain English written in Latin letters only. Rewrite it and call the tool again." };
+      return { status: "failed", error: rewriteHint(input, ctx.safe) };
     }
-    // Second time: swap every non-Latin field for a plain template sentence and carry on.
-    input = withSafeText(toolName, input);
+    // Second time: swap every bad field for a plain template sentence (real name, real pay link) and carry on.
+    input = withSafeText(toolName, input, ctx.safe);
   }
   let action: AgentAction | null = null;
   let result: MandateResult;

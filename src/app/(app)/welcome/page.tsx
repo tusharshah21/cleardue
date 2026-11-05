@@ -101,7 +101,7 @@ export default async function WelcomePage() {
                 <CardTitle>{s.title}</CardTitle>
               </CardHeader>
               <CardContent className="flex-1 space-y-2 text-sm text-muted-foreground">
-                {s.played && <p className="rounded-md bg-muted p-2 font-medium text-foreground">Already played by a previous visitor. Click Reset demo to replay it.</p>}
+                {s.played && <p className="rounded-md bg-muted p-2 font-medium text-foreground">Already played. Click Reset demo to replay it.</p>}
                 <p>{s.body}</p>
               </CardContent>
               <CardFooter className="flex-col gap-2">

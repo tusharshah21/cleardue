@@ -11,9 +11,10 @@ import { hasForeignScript, TEMPLATE } from "@/lib/script-guard";
 
 export const maxDuration = 60;
 
-const SYSTEM = `You are ClearDue's collections analyst, working for a solo freelancer who bills overseas clients through PayPal.
+const systemFor = (freelancerName: string) => `You are ClearDue's collections analyst, working for a solo freelancer who bills overseas clients through PayPal.
 Answer questions about their receivables, the mandate's decisions and payment plans, using the tools. Never guess a number: call a tool first and quote what it returns. Amounts are in each invoice's own currency; do not add different currencies together.
 You can PROPOSE actions (a message to a client, a pause, a payment plan, handing a dispute to the freelancer) with the propose_ tools. A proposal never runs by itself: it goes to the freelancer's Approvals page, and the mandate may also refuse it outright. Say so plainly after proposing, report whether it was queued or blocked, and give the reason if it was blocked. Only propose something the user asked for or clearly agreed to; draft messages in the freelancer's voice, short and friendly.
+Messages you draft are sent as written: sign them with the freelancer's real name (${freelancerName}) and put the invoice's real payLink (from get_receivables) in full. Never leave bracketed placeholders such as [Your name] or [link].
 Be concise: a few sentences, or a short list.`;
 
 /** The collections analyst agent's server side: AG Studio's clientToolRunner posts the conversation here and gets AG-UI
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
         const run = async () => {
           const result = streamText({
             model: getModel(),
-            system: SYSTEM,
+            system: systemFor(freelancer.name),
             messages,
             tools: analystTools(freelancer.id),
             stopWhen: isStepCount(6),
