@@ -119,6 +119,21 @@ describe("figures computed by code", () => {
   });
 });
 
+describe("groundAnswer: payment rails", () => {
+  const sources = { scope: "Payment: through PayPal.", invoice: "Total: AUD 3200.00. Amount outstanding: AUD 3200.00.", thread: "" };
+  const answer = (text: string, escalate = false): PayerAnswer => ({ answer: text, citations: [{ source: "scope", quote: "Payment: through PayPal." }], escalate, escalationReason: null, complaint: false, wantsPlan: false });
+  it("turns an answer that discusses bank details or Wise into a pass-over to the freelancer", () => {
+    const r = groundAnswer(answer("Yes, you can use Wise. Bank account number 12345678."), sources, "Aarav");
+    expect(r.escalate).toBe(true);
+    expect(r.answer).toMatch(/passed your message to Aarav/);
+    expect(r.answer).not.toMatch(/12345678|Wise/);
+  });
+  it("lets an escalated refusal through, and leaves ordinary answers alone", () => {
+    expect(groundAnswer(answer("I can't share bank details here; I've passed this to Aarav.", true), sources, "Aarav").answer).toMatch(/bank details/);
+    expect(groundAnswer(answer("Payment is through PayPal."), sources, "Aarav").escalate).toBe(false);
+  });
+});
+
 describe("groundAnswer", () => {
   const ok: PayerAnswer = {
     answer: "It's due on 2026-11-06 and the total is AUD 3200.00.",

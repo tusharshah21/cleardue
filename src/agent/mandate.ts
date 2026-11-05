@@ -1,6 +1,7 @@
 // The mandate: limits the freelancer sets, enforced in code. The LLM proposes an AgentAction;
 // checkAction() decides allow / needs_approval / deny. Pure functions only, no I/O.
 import { z } from "zod";
+import { mentionsPaymentRail } from "@/lib/payment-rails";
 
 export const Tone = z.enum(["friendly", "firm", "formal"]);
 export type Tone = z.infer<typeof Tone>;
@@ -52,7 +53,7 @@ export type AgentAction =
   | { type: "pause_reminders"; until: Date }
   | { type: "send_message"; to: "client" | "approver"; tone: Tone; body: string }
   | { type: "send_reminder"; invoiceId: string; tone: Tone; note: string; additionalRecipients: string[] }
-  | { type: "offer_plan"; instalments: Instalment[] }
+  | { type: "offer_plan"; instalments: Instalment[]; message?: string }
   | { type: "cancel_invoice"; invoiceId: string }
   | { type: "record_payment"; invoiceId: string; amountMinor: number };
 
@@ -98,6 +99,7 @@ export function inQuietHours(q: Mandate["quietHours"], timezone: string, at: Dat
 
 export const exceedsTone = (tone: Tone, ceiling: Tone) => TONE_RANK[tone] > TONE_RANK[ceiling];
 
+const RAIL_REASON = "the message mentions bank details or another way to pay; only the freelancer can agree to that";
 const CONTACTS: ActionType[] = ["send_message", "send_reminder"];
 const ALWAYS_APPROVAL: ActionType[] = ["cancel_invoice", "record_payment"];
 const INTERNAL: ActionType[] = ["read_invoice", "escalate_to_freelancer"];
@@ -164,6 +166,7 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
         const strangers = action.additionalRecipients.filter((r) => !known.has(r.toLowerCase()));
         if (strangers.length) deny.push(`unknown recipients: ${strangers.join(", ")}`);
       }
+      if (mentionsPaymentRail(body)) approval.push(RAIL_REASON);
       if (mandate.neverAutoContact) approval.push("client is marked never-auto-contact");
       if (inQuietHours(mandate.quietHours, ctx.clientTimezone, ctx.now)) approval.push("inside the client's quiet hours");
       break;
@@ -171,6 +174,7 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
     case "offer_plan":
       if (!OPEN.includes(invoice.status)) deny.push(`invoice is ${invoice.status}; no plan possible`);
       deny.push(...planProblems(action.instalments, ctx));
+      if (action.message && mentionsPaymentRail(action.message)) approval.push(RAIL_REASON);
       break;
     case "cancel_invoice":
       if (PAID.includes(invoice.status) || invoice.paidMinor > 0) deny.push("invoice is paid or partly paid; cannot cancel");

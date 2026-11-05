@@ -1,0 +1,275 @@
+{
+  "provider": "openai",
+  "model": "gpt-5.4-mini",
+  "ranAt": "2026-11-05T06:08:41.195Z",
+  "synthetic-india": {
+    "total": 26,
+    "correct": 26,
+    "fallbacks": 0,
+    "perReason": [
+      {
+        "reason": "forgot",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "awaiting_approval",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "cash_constraint",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "dispute",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "wrong_contact",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "promised_date",
+        "n": 4,
+        "correct": 4
+      },
+      {
+        "reason": "claims_paid",
+        "n": 3,
+        "correct": 3
+      },
+      {
+        "reason": "other",
+        "n": 4,
+        "correct": 4
+      }
+    ],
+    "dates": {
+      "n": 4,
+      "correct": 4
+    },
+    "misses": [],
+    "latency": {
+      "avgMs": 2134,
+      "p95Ms": 3069
+    },
+    "results": [
+      {
+        "id": "in-01",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.97,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-02",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-03",
+        "expected": "forgot",
+        "got": "forgot",
+        "confidence": 0.97,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-04",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.99,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-05",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-06",
+        "expected": "awaiting_approval",
+        "got": "awaiting_approval",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-07",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": "2026-12-31"
+      },
+      {
+        "id": "in-08",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.96,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-09",
+        "expected": "cash_constraint",
+        "got": "cash_constraint",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-10",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.99,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-11",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.99,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-12",
+        "expected": "dispute",
+        "got": "dispute",
+        "confidence": 0.99,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-13",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.99,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-14",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-15",
+        "expected": "wrong_contact",
+        "got": "wrong_contact",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-16",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.98,
+        "fallback": false,
+        "promisedDate": "2026-11-09",
+        "gotDate": "2026-11-09"
+      },
+      {
+        "id": "in-17",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.98,
+        "fallback": false,
+        "promisedDate": "2026-11-15",
+        "gotDate": "2026-11-15"
+      },
+      {
+        "id": "in-18",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.96,
+        "fallback": false,
+        "promisedDate": "2026-11-30",
+        "gotDate": "2026-11-30"
+      },
+      {
+        "id": "in-19",
+        "expected": "promised_date",
+        "got": "promised_date",
+        "confidence": 0.98,
+        "fallback": false,
+        "promisedDate": "2026-11-06",
+        "gotDate": "2026-11-06"
+      },
+      {
+        "id": "in-20",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-21",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.97,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-22",
+        "expected": "claims_paid",
+        "got": "claims_paid",
+        "confidence": 0.97,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-23",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.95,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-24",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-25",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.91,
+        "fallback": false,
+        "gotDate": null
+      },
+      {
+        "id": "in-26",
+        "expected": "other",
+        "got": "other",
+        "confidence": 0.98,
+        "fallback": false,
+        "gotDate": null
+      }
+    ]
+  }
+}

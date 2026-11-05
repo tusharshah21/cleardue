@@ -63,7 +63,7 @@ flowchart LR
   WH --- DB
 ```
 
-**LLM proposes, deterministic TypeScript validates.** The model never calls PayPal directly. Every tool call goes through `gate()` in [src/agent/tools.ts](src/agent/tools.ts), which turns it into an `AgentAction` and runs `checkAction()` from [src/agent/mandate.ts](src/agent/mandate.ts) against the freelancer's mandate for that client: autopilot, never auto-contact, minimum confidence, tone ceiling, maximum instalments, minimum first payment, latest final date and quiet hours in the client's time zone. The result is `allow` (runs now), `needs_approval` (queued on Approvals with the draft editable) or `deny` (recorded with reasons, never run). The mandate module has 100% statement and branch coverage (`npm run test:mandate`).
+**LLM proposes, deterministic TypeScript validates.** The model never calls PayPal directly. Every tool call goes through `gate()` in [src/agent/tools.ts](src/agent/tools.ts), which turns it into an `AgentAction` and runs `checkAction()` from [src/agent/mandate.ts](src/agent/mandate.ts) against the freelancer's mandate for that client: autopilot, never auto-contact, minimum confidence, tone ceiling, maximum instalments, minimum first payment, latest final date and quiet hours in the client's time zone, and anything that mentions bank details or another way to pay always waits for the freelancer. The result is `allow` (runs now), `needs_approval` (queued on Approvals with the draft editable) or `deny` (recorded with reasons, never run). The mandate module has 100% statement and branch coverage (`npm run test:mandate`).
 
 ## Collections analyst (AG Studio)
 
@@ -141,18 +141,22 @@ An overdue invoice with no client reply never reaches the model: code marks it `
 
 ### Evals
 
-Two labelled sets, reported separately:
+Three labelled sets, reported separately:
 
 - [evals/synthetic.json](evals/synthetic.json): 30 replies written for the reasons as defined, at least three per reason, including mixed reasons (a dispute outranks cash), relative dates ("Friday", "end of the month") and a prompt injection.
+- [evals/synthetic-india.json](evals/synthetic-india.json): 26 synthetic replies for the Indian cross-border freelancer context (US, UK, Australian, Canadian, Singaporean and UAE clients of an India-based freelancer, including Indian business English such as "kindly bear with us" and "will revert"), with each client's currency, amount and days overdue. Written and reviewed by an India-based author; **synthetic, not collected from real clients**.
 - [evals/real.json](evals/real.json): anonymized real client replies with their labels. A case can carry its own `today` (the day it was sent) so relative dates resolve correctly.
 
 ```bash
-npm run eval
+npm run eval                      # every set
+npm run eval -- synthetic-india   # one set
 ```
 
 It runs each reply through `classifyReply` with the live primary model (it ignores `DEMO_MODE` and failover, and needs `AI_MODEL` and the key for `AI_PROVIDER`). Calls are paced at one every 6 seconds (`EVAL_DELAY_MS`), which suits Gemini's free tier; use `EVAL_DELAY_MS=0` on a paid tier. For each set it prints overall and per-reason accuracy, latency (average and p95) and promised-date resolution, lists the misses, then writes `evals/last-run.json` (or `EVAL_OUT`). `npm run eval -- real` runs one set. `npm run ai:compare` runs fixed scenarios for the other AI tasks (scope check, pay-page assistant, the proposal tool loop through the real mandate gate, and the analyst agent) against one provider.
 
 Live runs of the synthetic set (saved in [evals/results](evals/results)). On `gemini-3.5-flash-lite` the first run scored 28 of 30 (93%), where the two misses were the ambiguous replies above, read as `forgot`. After tightening the `other` guidance in the classify prompt it scored 29 of 30 and then 30 of 30, with 4 of 4 promised dates resolved each time. The model is not deterministic: the 29 had one different miss (the prompt-injection case read as `claims_paid`, which the mandate would also have held for approval), so expect a point either way between runs.
+
+**India-context synthetic set (written and reviewed by an India-based author).** 2026-11-05, `gpt-5.4-mini` (the primary), run live with no failover: **26 of 26 correct (100%)**, every reason 3 of 3 (promised date 4 of 4), promised dates 4 of 4 resolved (including "next Monday, the 9th", "the 15th", "the end of this month" and "this Friday", with today as 2026-11-05), lowest confidence 0.91, latency 2.1 s average and 3.1 s p95 ([raw results](evals/results/2026-11-05-synthetic-india-openai-gpt-5.4-mini.json)). Like the first set it is synthetic: it shows the prompt handles this context, not how real clients write, and `real.json` stays empty until real replies are added. One case is a safety probe rather than a late reason: a client asks to pay through Wise and for the freelancer's bank details (read as `other`, so no tool runs). Separately, the mandate holds any outgoing message, reminder note or plan message that mentions bank details or another way to pay (bank, IBAN, Wise, UPI, wire and so on) for the freelancer's approval even with autopilot on, and the pay-page assistant hands such a question to the freelancer instead of answering it ([tests](src/agent/mandate.test.ts)).
 
 ### Choosing the provider (2026-11-04)
 

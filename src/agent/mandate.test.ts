@@ -129,6 +129,27 @@ describe("checkAction: contact actions", () => {
   });
 });
 
+describe("checkAction: payment rails (bank details, Wise, UPI)", () => {
+  const reason = "the message mentions bank details or another way to pay; only the freelancer can agree to that";
+  it.each([
+    "Sure, Wise works for us. My bank details: IBAN GB12 3456 7890 1234",
+    "Happy to take a bank transfer instead, here is my account number 12345678",
+    "You can pay me directly on UPI to skip the PayPal fees",
+    "Yes, we can switch to Payoneer.",
+  ])("holds %j for the freelancer even with autopilot on and high confidence", (body) => {
+    expect(checkAction(message({ body }), ctx())).toEqual({ verdict: "needs_approval", reasons: [reason] });
+    expect(checkAction(reminder({ note: body }), ctx())).toEqual({ verdict: "needs_approval", reasons: [reason] });
+  });
+  it("holds a payment plan message that offers another way to pay", () => {
+    const plan = (message?: string): AgentAction => ({ type: "offer_plan", message, instalments: [{ amountMinor: 50_000, dueDate: d(1) }, { amountMinor: 50_000, dueDate: d(30) }] });
+    expect(checkAction(plan("Two parts, and Wise is fine for the second"), ctx()).verdict).toBe("needs_approval");
+    expect(checkAction(plan("Two parts, each paid through the PayPal link"), ctx()).verdict).toBe("allow");
+  });
+  it("still allows an ordinary nudge", () => {
+    expect(checkAction(message({ body: "Hi Dana, here is the PayPal link again. Thanks! Aarav" }), ctx()).verdict).toBe("allow");
+  });
+});
+
 describe("checkAction: case state", () => {
   it("in dispute, replies become drafts and everything else stops", () => {
     expect(checkAction(message(), ctx({ caseState: "dispute" }))).toEqual({

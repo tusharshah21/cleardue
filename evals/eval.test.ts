@@ -25,6 +25,18 @@ describe("eval sets", () => {
   });
 });
 
+describe("synthetic-india", () => {
+  it("has 26 reviewed cases covering every reason at least 3 times, with per-case client details", () => {
+    const { cases } = load("synthetic-india");
+    expect(cases).toHaveLength(26);
+    for (const reason of REASONS) expect(cases.filter((c) => c.expected === reason).length, reason).toBeGreaterThanOrEqual(3);
+    for (const c of cases) expect(c.client, c.id).toBeTruthy();
+  });
+  it("keeps the real set empty until real replies are added", () => {
+    expect(load("real").cases).toEqual([]);
+  });
+});
+
 describe("score", () => {
   it("counts per-reason accuracy, dates and misses", () => {
     const s = score([

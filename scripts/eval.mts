@@ -1,9 +1,9 @@
-// Reply-classification eval: runs each set in evals/ through the live model and reports per-reason accuracy,
+// Reply-classification eval: runs each set in evals/ (synthetic, synthetic-india, real) through the live model and reports per-reason accuracy,
 // set by set. Needs AI_MODEL and the key for AI_PROVIDER (google, openai or anthropic); DEMO_MODE is
 // ignored, and so is any failover: it measures the primary provider alone. Calls are paced (EVAL_DELAY_MS, default 6000 = 10 a
 // minute) to stay under the Gemini free tier's per-minute limit; use 0 for a paid tier. EVAL_OUT sets the output file.
-//   npm run eval               both sets
-//   npm run eval -- real       one set (synthetic | real)
+//   npm run eval                       every set
+//   npm run eval -- synthetic-india    one set (synthetic | synthetic-india | real)
 import "dotenv/config";
 import { readFileSync, writeFileSync } from "node:fs";
 import { aiProvider, keyVar, liveModel } from "../src/ai/provider";
@@ -39,8 +39,8 @@ for (const set of EVAL_SETS.filter((s) => !only || s === only)) {
     const now = new Date(`${c.today ?? today}T09:00:00Z`);
     const t0 = Date.now();
     const r = await classifyReply(model, {
-      clientName: "Client",
-      invoiceSummary: "Invoice 0001, USD 2400.00, 13 days overdue",
+      clientName: c.client?.name ?? "Client",
+      invoiceSummary: c.client ? `Invoice 0001, ${c.client.currency} ${c.client.amount}, ${c.client.days_overdue} days overdue` : "Invoice 0001, USD 2400.00, 13 days overdue",
       thread: [
         { from: "freelancer", at: new Date(now.getTime() - 6 * 86_400_000), body: "Hi, a friendly reminder that invoice 0001 is now overdue." },
         ...c.messages.map((body) => ({ from: "client" as const, at: now, body })),

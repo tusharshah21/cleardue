@@ -105,8 +105,7 @@ export function toAction(toolName: string, input: Input, ctx: GateContext): Agen
     case "pause_reminders":
       return { type: "pause_reminders", until: dateOf(LOCAL_TOOLS.pause_reminders.schema.parse(input).until) };
     case "offer_payment_plan":
-      LOCAL_TOOLS.offer_payment_plan.schema.parse(input);
-      return { type: "offer_plan", instalments: planInstalments(input.instalments, ctx.currency) };
+      return { type: "offer_plan", instalments: planInstalments(input.instalments, ctx.currency), message: LOCAL_TOOLS.offer_payment_plan.schema.parse(input).message };
     // Not a model tool: a plan the client accepted on the pay page, waiting for the freelancer (src/plans/accept.ts).
     case "apply_payment_plan":
       return { type: "offer_plan", instalments: planInstalments(input.instalments, ctx.currency) };

@@ -1,8 +1,9 @@
 // Scoring for the reply-classification eval (npm run eval). Pure, so it is unit-tested.
 import { REASONS, type Reason } from "../src/ai/schemas";
 
-/** evals/<set>.json. synthetic: written for the reasons as defined; real: anonymized client replies. */
-export const EVAL_SETS = ["synthetic", "real"] as const;
+/** evals/<set>.json. synthetic: written for the reasons as defined; synthetic-india: written for Indian cross-border freelancers
+ * (overseas clients, Indian business English), reviewed by an India-based author; real: anonymized client replies. */
+export const EVAL_SETS = ["synthetic", "synthetic-india", "real"] as const;
 
 export interface EvalCase {
   id: string;
@@ -12,6 +13,9 @@ export interface EvalCase {
   expected: Reason;
   promisedDate?: string;
   approverEmail?: string;
+  /** Who replied and what is owed, so the prompt sees what a real case would (the default is a generic USD 2400.00 invoice). */
+  client?: { name: string; country: string; currency: string; amount: string; days_overdue: number };
+  note?: string;
 }
 
 export interface EvalResult {

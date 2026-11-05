@@ -80,6 +80,14 @@ describe("gated agent tools", () => {
     expect(r.executed).toEqual([]);
   });
 
+  it("queues, and never sends, a reply that agrees to bank details or a switch to Wise (autopilot on, high confidence)", async () => {
+    const yes = { ...nudge, body: "Hi, yes Wise is fine. My bank details are IBAN GB12 3456 7890 1234. Aarav" };
+    const r = await run(ctx(), [[call("send_message", yes)], [{ type: "text", text: "Replied." }]]);
+    expect(r.recorded[0].result.verdict).toBe("needs_approval");
+    expect(r.recorded[0].result.reasons[0]).toMatch(/bank details or another way to pay/);
+    expect(r.executed).toEqual([]);
+  });
+
   it("never executes a denied action, and tells the model why", async () => {
     const r = await run(ctx(), [[call("send_message", { ...nudge, tone: "formal" })], [{ type: "text", text: "Denied." }]]);
     expect(r.recorded[0].result.verdict).toBe("deny");

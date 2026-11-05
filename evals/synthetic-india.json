@@ -1,0 +1,222 @@
+{
+  "name": "synthetic-india",
+  "description": "Synthetic client replies written for the Indian cross-border freelancer context: overseas clients (US, UK, Australia, Canada, Singapore, UAE) replying about an overdue PayPal invoice from an India-based freelancer. Includes Indian business English used by Gulf and Asia-based agencies. Synthetic, not collected from real clients; reviewed for authenticity by an India-based author.",
+  "today": "2026-11-05",
+  "cases": [
+    {
+      "id": "in-01",
+      "messages": [
+        "Apologies Rohan, this slipped through the cracks during our launch week. Could you resend the payment link? I can't find the original email."
+      ],
+      "expected": "forgot",
+      "client": { "name": "Brookline Studio", "country": "US", "currency": "USD", "amount": "1200.00", "days_overdue": 6 }
+    },
+    {
+      "id": "in-02",
+      "messages": [
+        "Sorry Priya, I was travelling and completely missed your earlier emails. Paying it now."
+      ],
+      "expected": "forgot",
+      "client": { "name": "Harbour Apps", "country": "SG", "currency": "SGD", "amount": "1600.00", "days_overdue": 9 }
+    },
+    {
+      "id": "in-03",
+      "messages": [
+        "Ah, I was sure I'd already set this up. My mistake, I never actually approved it in PayPal. Doing it now."
+      ],
+      "expected": "forgot",
+      "client": { "name": "Kettle & Co", "country": "UK", "currency": "GBP", "amount": "750.00", "days_overdue": 4 }
+    },
+    {
+      "id": "in-04",
+      "messages": [
+        "The invoice is with our finance team. They process vendor payments in the monthly run once the CFO signs off."
+      ],
+      "expected": "awaiting_approval",
+      "client": { "name": "Northpeak Labs", "country": "US", "currency": "USD", "amount": "2400.00", "days_overdue": 8 }
+    },
+    {
+      "id": "in-05",
+      "messages": [
+        "Dear Ankit, the invoice has been forwarded to our accounts department for approval. Will revert once it is processed. Kindly bear with us."
+      ],
+      "expected": "awaiting_approval",
+      "client": { "name": "Desert Pixel Agency", "country": "AE", "currency": "USD", "amount": "1800.00", "days_overdue": 12 }
+    },
+    {
+      "id": "in-06",
+      "messages": [
+        "Our AP team needs a PO number on the invoice before it can enter the approval queue. Once that's added it goes to my manager for sign-off."
+      ],
+      "expected": "awaiting_approval",
+      "client": { "name": "Saltbush Digital", "country": "AU", "currency": "AUD", "amount": "3200.00", "days_overdue": 5 }
+    },
+    {
+      "id": "in-07",
+      "messages": [
+        "Honestly, we're waiting on our seed round to close and cash is tight this month. Could we do half now and the rest in December?"
+      ],
+      "expected": "cash_constraint",
+      "client": { "name": "Lumen Health", "country": "US", "currency": "USD", "amount": "3000.00", "days_overdue": 10 }
+    },
+    {
+      "id": "in-08",
+      "messages": [
+        "Things are slow on our side since one of our own clients stopped paying. Can you give us a few weeks? We will definitely pay."
+      ],
+      "expected": "cash_constraint",
+      "client": { "name": "Fernhill Media", "country": "UK", "currency": "GBP", "amount": "1100.00", "days_overdue": 14 }
+    },
+    {
+      "id": "in-09",
+      "messages": [
+        "Is there any way to split this into three payments? Our budget was cut this quarter."
+      ],
+      "expected": "cash_constraint",
+      "client": { "name": "Maple Row Analytics", "country": "CA", "currency": "CAD", "amount": "2700.00", "days_overdue": 7 }
+    },
+    {
+      "id": "in-10",
+      "messages": [
+        "Before we pay: the mobile site still breaks on Safari and the checkout page doesn't match the Figma. We can't sign this off as complete."
+      ],
+      "expected": "dispute",
+      "client": { "name": "Cartwheel Commerce", "country": "US", "currency": "USD", "amount": "2200.00", "days_overdue": 6 }
+    },
+    {
+      "id": "in-11",
+      "messages": [
+        "We agreed on 40 hours, not 52. Please revise the invoice to the agreed amount and we'll pay that."
+      ],
+      "expected": "dispute",
+      "client": { "name": "Bluegum Ventures", "country": "AU", "currency": "AUD", "amount": "2600.00", "days_overdue": 3 }
+    },
+    {
+      "id": "in-12",
+      "messages": [
+        "Money is tight for us anyway, but more importantly the copy has typos throughout and two pages are missing. I'm not paying for unfinished work."
+      ],
+      "expected": "dispute",
+      "client": { "name": "Thistle Press", "country": "UK", "currency": "GBP", "amount": "900.00", "days_overdue": 11 },
+      "note": "Dispute outranks cash constraint."
+    },
+    {
+      "id": "in-13",
+      "messages": [
+        "Hi, I'm the marketing lead and don't handle payments. Please send invoices to billing@northpeak.example."
+      ],
+      "expected": "wrong_contact",
+      "client": { "name": "Northpeak Labs", "country": "US", "currency": "USD", "amount": "1500.00", "days_overdue": 9 }
+    },
+    {
+      "id": "in-14",
+      "messages": [
+        "Mark left the company last month. Please reach out to our new operations manager, Li Wei, at liwei@harbourapps.example."
+      ],
+      "expected": "wrong_contact",
+      "client": { "name": "Harbour Apps", "country": "SG", "currency": "SGD", "amount": "2100.00", "days_overdue": 16 }
+    },
+    {
+      "id": "in-15",
+      "messages": [
+        "This email ID is not monitored for payments. Kindly send the invoice to accounts@desertpixel.example and do the needful."
+      ],
+      "expected": "wrong_contact",
+      "client": { "name": "Desert Pixel Agency", "country": "AE", "currency": "USD", "amount": "950.00", "days_overdue": 8 }
+    },
+    {
+      "id": "in-16",
+      "messages": [
+        "Payment will go out next Monday, the 9th."
+      ],
+      "expected": "promised_date",
+      "promisedDate": "2026-11-09",
+      "client": { "name": "Granite Row", "country": "US", "currency": "USD", "amount": "1750.00", "days_overdue": 5 }
+    },
+    {
+      "id": "in-17",
+      "messages": [
+        "We pay suppliers on the 15th, so you'll see it then."
+      ],
+      "expected": "promised_date",
+      "promisedDate": "2026-11-15",
+      "client": { "name": "Kettle & Co", "country": "UK", "currency": "GBP", "amount": "1300.00", "days_overdue": 6 }
+    },
+    {
+      "id": "in-18",
+      "messages": [
+        "Will clear it positively by the end of this month."
+      ],
+      "expected": "promised_date",
+      "promisedDate": "2026-11-30",
+      "client": { "name": "Oasis Interactive", "country": "AE", "currency": "USD", "amount": "2000.00", "days_overdue": 13 }
+    },
+    {
+      "id": "in-19",
+      "messages": [
+        "No worries, I'll pay it this Friday."
+      ],
+      "expected": "promised_date",
+      "promisedDate": "2026-11-06",
+      "client": { "name": "Saltbush Digital", "country": "AU", "currency": "AUD", "amount": "1400.00", "days_overdue": 4 }
+    },
+    {
+      "id": "in-20",
+      "messages": [
+        "We paid this on Monday through PayPal. Can you check again? I have the receipt."
+      ],
+      "expected": "claims_paid",
+      "client": { "name": "Lumen Health", "country": "US", "currency": "USD", "amount": "1200.00", "days_overdue": 7 }
+    },
+    {
+      "id": "in-21",
+      "messages": [
+        "Our bank sent a wire transfer last week, reference CLD-0042. It should be with you by now."
+      ],
+      "expected": "claims_paid",
+      "client": { "name": "Fernhill Media", "country": "UK", "currency": "GBP", "amount": "800.00", "days_overdue": 9 }
+    },
+    {
+      "id": "in-22",
+      "messages": [
+        "Already done from our side. Please check your PayPal balance."
+      ],
+      "expected": "claims_paid",
+      "client": { "name": "Harbour Apps", "country": "SG", "currency": "SGD", "amount": "1250.00", "days_overdue": 5 }
+    },
+    {
+      "id": "in-23",
+      "messages": [
+        "Noted, thanks."
+      ],
+      "expected": "other",
+      "client": { "name": "Granite Row", "country": "US", "currency": "USD", "amount": "650.00", "days_overdue": 3 }
+    },
+    {
+      "id": "in-24",
+      "messages": [
+        "Let me look into this and revert."
+      ],
+      "expected": "other",
+      "client": { "name": "Oasis Interactive", "country": "AE", "currency": "USD", "amount": "1100.00", "days_overdue": 6 },
+      "note": "Indian business English for 'get back to you'. No reason or date given."
+    },
+    {
+      "id": "in-25",
+      "messages": [
+        "PayPal fees are quite high on our side. Can we pay through Wise instead? Send me your bank details."
+      ],
+      "expected": "other",
+      "client": { "name": "Maple Row Analytics", "country": "CA", "currency": "CAD", "amount": "1900.00", "days_overdue": 8 },
+      "note": "Payment-rail request, not a late reason. Freelancer should decide; agent must not share bank details."
+    },
+    {
+      "id": "in-26",
+      "messages": [
+        "Can you also send a quote for phase two while you're at it?"
+      ],
+      "expected": "other",
+      "client": { "name": "Brookline Studio", "country": "US", "currency": "USD", "amount": "2400.00", "days_overdue": 2 }
+    }
+  ]
+}
