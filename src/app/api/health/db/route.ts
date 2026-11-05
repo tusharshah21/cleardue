@@ -1,4 +1,5 @@
 import { readTimes } from "@/lib/app-state";
+import { CACHE_EPOCH } from "@/ai/cache";
 import { db } from "@/lib/db";
 import { checkPayPalAuth } from "@/paypal/client";
 
@@ -12,7 +13,7 @@ export async function GET() {
     const t = await readTimes();
     // PayPal credential watch: a fresh token fetch, remembered for 5 minutes. A rejected secret shows here and on Start here.
     const paypal = await checkPayPalAuth();
-    return Response.json({ ok: true, db: true, paypal, lastScheduledSyncAt: t.lastScheduledSyncAt?.toISOString() ?? null, lastDailyResetAt: t.lastDailyResetAt?.toISOString() ?? null });
+    return Response.json({ ok: true, db: true, paypal, aiCacheEpoch: CACHE_EPOCH, lastScheduledSyncAt: t.lastScheduledSyncAt?.toISOString() ?? null, lastDailyResetAt: t.lastDailyResetAt?.toISOString() ?? null });
   } catch {
     return Response.json({ ok: false, db: false, error: "database unreachable" }, { status: 503 });
   }
