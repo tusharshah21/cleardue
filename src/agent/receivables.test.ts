@@ -55,10 +55,10 @@ describe("receivablesFor with an accepted plan", () => {
 
 describe("supersedePending", () => {
   it("marks pending proposals Superseded (never Rejected) and says so on the timeline", async () => {
-    h.proposals = [{ id: "a1", status: "pending", type: "send_message", params: { to: "client", tone: "friendly", subject: "s", body: "b" } }, { id: "a2", status: "executed", type: "pause_reminders", params: {} }];
+    h.proposals = [{ id: "a1", status: "pending", type: "send_message", params: { to: "client", tone: "friendly", subject: "s", body: "b" } }, { id: "a2", status: "executed", type: "pause_reminders", params: {} }, { id: "a3", status: "pending", type: "apply_payment_plan", params: { instalments: [] } }];
     h.timeline = [];
     expect(await supersedePending("case1", "inv1", "the invoice is now cancelled")).toBe(1);
-    expect(h.proposals.map((p) => p.status)).toEqual(["superseded", "executed"]);
+    expect(h.proposals.map((p) => p.status)).toEqual(["superseded", "executed", "pending"]);
     expect(h.timeline).toHaveLength(1);
     expect(h.timeline[0]).toMatch(/^Superseded: .*\(the invoice is now cancelled\)$/);
     expect(h.timeline[0]).not.toMatch(/ejected/);

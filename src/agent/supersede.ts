@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { describeProposal } from "@/lib/proposals";
 
 export async function supersedePending(caseId: string, invoiceId: string, why: string): Promise<number> {
-  const pending = await db.proposedAction.findMany({ where: { caseId, status: "pending" } });
+  // The client's accepted plan is the very thing that closes the original invoice, so it is never superseded by it.
+  const pending = (await db.proposedAction.findMany({ where: { caseId, status: "pending" } })).filter((p) => p.type !== "apply_payment_plan");
   if (!pending.length) return 0;
   await db.proposedAction.updateMany({ where: { id: { in: pending.map((p) => p.id) } }, data: { status: "superseded", decidedAt: new Date(), result: { superseded: why } } });
   for (const p of pending) {
