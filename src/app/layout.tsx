@@ -9,6 +9,8 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "ClearDue",
   description: "An AI collections agent for solo freelancers who bill through PayPal.",
+  openGraph: { title: "ClearDue", description: "Get paid without chasing. An AI collections agent for freelancers, built on PayPal.", images: [{ url: "/brand/og.png", width: 1200, height: 630, alt: "ClearDue: get paid without chasing" }] },
+  twitter: { card: "summary_large_image", title: "ClearDue", description: "Get paid without chasing.", images: ["/brand/og.png"] },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

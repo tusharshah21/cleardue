@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="border-b bg-muted/40 p-4 md:w-56 md:border-r md:border-b-0">
-        <Link href="/dashboard" className="block text-lg font-semibold">
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold">
+          <Image src="/brand/cleardue-mark.png" alt="" width={28} height={28} className="size-7" priority />
           ClearDue
         </Link>
         <p className="mt-1 text-xs text-muted-foreground">{freelancer.businessName}</p>

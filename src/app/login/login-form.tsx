@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState } from "react";
 import { loginAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ export function LoginForm({ demo }: { demo: { email: string; password: string } 
     <main className="flex flex-1 items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">ClearDue</CardTitle>
+          <Image src="/brand/cleardue-logo.png" alt="ClearDue: get paid without chasing" width={640} height={202} className="mb-2 h-auto w-56" priority />
+          <CardTitle className="sr-only">ClearDue</CardTitle>
           <CardDescription>Sign in to the demo freelancer account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

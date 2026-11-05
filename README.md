@@ -1,3 +1,5 @@
+<p align="center"><img src="public/brand/cleardue-logo.png" alt="ClearDue: get paid without chasing" width="360"></p>
+
 # ClearDue
 
 An AI collections agent for solo Indian freelancers who bill overseas clients through PayPal. ClearDue works out *why* a client hasn't paid (forgot, waiting on approval, short on cash, disputing the work, wrong contact) and takes the matching action, always inside limits the freelancer sets. Clients get an assistant on the pay page that answers questions from the agreed scope, with quotes.
