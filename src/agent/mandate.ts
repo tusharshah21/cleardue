@@ -99,7 +99,7 @@ export function inQuietHours(q: Mandate["quietHours"], timezone: string, at: Dat
 
 export const exceedsTone = (tone: Tone, ceiling: Tone) => TONE_RANK[tone] > TONE_RANK[ceiling];
 
-const RAIL_REASON = "the message mentions bank details or another way to pay; only the freelancer can agree to that";
+const RAIL_REASON = "Held for you: mentions bank details or a payment method";
 const CONTACTS: ActionType[] = ["send_message", "send_reminder"];
 const ALWAYS_APPROVAL: ActionType[] = ["cancel_invoice", "record_payment"];
 const INTERNAL: ActionType[] = ["read_invoice", "escalate_to_freelancer"];

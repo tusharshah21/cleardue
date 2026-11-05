@@ -130,7 +130,7 @@ describe("checkAction: contact actions", () => {
 });
 
 describe("checkAction: payment rails (bank details, Wise, UPI)", () => {
-  const reason = "the message mentions bank details or another way to pay; only the freelancer can agree to that";
+  const reason = "Held for you: mentions bank details or a payment method";
   it.each([
     "Sure, Wise works for us. My bank details: IBAN GB12 3456 7890 1234",
     "Happy to take a bank transfer instead, here is my account number 12345678",
