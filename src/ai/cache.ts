@@ -28,7 +28,7 @@ export interface CacheRequest {
 
 /** Bump to retire every cached result at once (older rows stay in the table but never match again). Used when the cache
  * must not be reused, for example before a recording that should show live answers. `npm run cache:clear` also deletes rows. */
-export const CACHE_EPOCH = "2026-11-05-capture-2";
+export const CACHE_EPOCH = "2026-11-05-capture-3";
 
 const modelName = (m: LanguageModel) => (typeof m === "string" ? m : `${m.provider}/${m.modelId}`);
 
