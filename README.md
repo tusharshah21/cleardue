@@ -8,7 +8,7 @@ An AI collections agent for solo Indian freelancers who bill overseas clients th
 
 ## The problem
 
-85% of freelancers have experienced late payment ([Plutio, citing Freelancers Union](https://www.plutio.com/freelancer-magazine/late-invoice-payments)), and in a survey of New York freelance workers, 91% "reported experiencing late or overdue wages at least once in their career" ([Authors Guild, Freelancers Union and others](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment)).
+In a survey of New York freelance workers, 91% "reported experiencing late or overdue wages at least once in their career" ([Authors Guild, Freelancers Union and others](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment)).
 
 Chasing invoices is worse for a solo freelancer in India billing a client in London or Sydney: different time zones, an accounts payable team they've never met, and a payment platform that won't let the client pay in parts. Reminder tools send the same nudge whatever the reason. But "finance hasn't signed off", "cash is tight this month" and "the site breaks on Safari" need three different responses, and the wrong one costs the relationship.
 

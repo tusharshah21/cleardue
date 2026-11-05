@@ -30,6 +30,7 @@ const STORIES = [
     body: "Sam is short on cash. Diagnose it, open Sam's pay page and accept a plan. Autopilot is off here, so it waits on Approvals; once approved, PayPal gets two smaller invoices.",
     cta: "Open Brightside's invoice",
     target: "invoice",
+    extra: "Open Sam's pay page",
   },
   {
     client: "Koala Digital",
@@ -40,6 +41,14 @@ const STORIES = [
   },
 ] as const;
 
+const ANALYST = {
+  client: "Analyst",
+  title: "Ask the analyst",
+  body: "Ask in plain English, answered from the live data through the same mandate. Try: \"Who owes me money, and what should I do first?\" Anything it proposes lands in Approvals; it never sends on its own.",
+  cta: "Ask the analyst",
+  href: "/analyst",
+};
+
 const ACME_NIGHT =
   "It's night in New York, so Aarav's mandate holds client contact until morning (quiet hours). The diagnosis still runs and the reminder waits in Approvals. Try Koala for an autopilot plan, or come back during New York daytime.";
 
@@ -47,9 +56,10 @@ export default async function WelcomePage() {
   const freelancer = await requireFreelancer();
   const invoices = await db.invoice.findMany({
     where: { client: { freelancerId: freelancer.id, name: { in: STORIES.map((s) => s.client) } }, planGroupId: null },
-    include: { client: true },
+    include: { client: true, case: true },
     orderBy: { createdAt: "asc" },
   });
+  const plans = await db.planGroup.findMany({ where: { originalInvoiceId: { in: invoices.map((i) => i.id) } }, select: { originalInvoiceId: true } });
   const now = new Date();
   const { lastScheduledSyncAt } = await readTimes();
   const paypal = await checkPayPalAuth();
@@ -59,15 +69,19 @@ export default async function WelcomePage() {
     const href = s.target === "pay" ? `/pay/${invoice.payToken}` : `/invoices/${invoice.id}`;
     // Acme's autopilot reminder is client contact, which the mandate holds during the client's quiet hours.
     const quiet = s.client === "Acme Labs" && inQuietHours(effectiveMandate(freelancer.mandate, invoice.client.mandate).quietHours, invoice.client.timezone, now);
-    return [quiet ? { ...s, href, title: "Quiet hours: the reminder waits", body: ACME_NIGHT } : { ...s, href }];
+    // A story someone has already played through: Acme diagnosed, Brightside on a plan (or closed), Koala paid.
+    const paid = invoice.status === "PAID" || invoice.status === "MARKED_AS_PAID";
+    const played = s.client === "Acme Labs" ? !!invoice.case || paid : s.client === "Brightside Studio" ? plans.some((p) => p.originalInvoiceId === invoice.id) || paid || invoice.status === "CANCELLED" : paid;
+    const extraHref = "extra" in s ? `/pay/${invoice.payToken}` : undefined;
+    return [{ ...s, ...(quiet && !played ? { title: "Quiet hours: the reminder waits", body: ACME_NIGHT } : {}), href, extraHref, played }];
   });
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Start here</p>
-        <h1 className="text-2xl font-semibold text-balance">85% of freelancers have been paid late. ClearDue finds out why each client hasn&apos;t paid and acts on it through PayPal, inside limits the freelancer sets.</h1>
-        <p className="text-muted-foreground">You&apos;re signed in as {freelancer.name}, a designer in India with three overseas clients. Each story below takes a minute.</p>
+        <h1 className="text-2xl font-semibold text-balance">91% of surveyed New York freelancers have been paid late at least once. ClearDue finds out why each client hasn&apos;t paid and acts on it through PayPal, inside limits the freelancer sets.</h1>
+        <p className="text-muted-foreground">You&apos;re signed in as {freelancer.name}, a designer in India with three overseas clients. Each story below takes a minute, and the analyst is there to ask.</p>
       </div>
 
       {!paypal.ok && paypal.problem !== "unreachable" && (
@@ -77,8 +91,8 @@ export default async function WelcomePage() {
       )}
 
       {stories.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          {stories.map((s, n) => (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[...stories, { ...ANALYST, target: "app" as const, played: false, extraHref: undefined, extra: undefined }].map((s, n) => (
             <Card key={s.client} className="flex flex-col">
               <CardHeader>
                 <CardDescription>
@@ -86,11 +100,19 @@ export default async function WelcomePage() {
                 </CardDescription>
                 <CardTitle>{s.title}</CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 text-sm text-muted-foreground">{s.body}</CardContent>
-              <CardFooter>
+              <CardContent className="flex-1 space-y-2 text-sm text-muted-foreground">
+                {s.played && <p className="rounded-md bg-muted p-2 font-medium text-foreground">Already played by a previous visitor. Click Reset demo to replay it.</p>}
+                <p>{s.body}</p>
+              </CardContent>
+              <CardFooter className="flex-col gap-2">
                 <Link href={s.href} className={buttonVariants({ variant: n === 0 ? "default" : "outline", className: "w-full" })} {...(s.target === "pay" && { target: "_blank", rel: "noopener" })}>
                   {s.cta}
                 </Link>
+                {s.extraHref && (
+                  <Link href={s.extraHref} target="_blank" rel="noopener" className={buttonVariants({ variant: "ghost", className: "w-full" })}>
+                    {(s as { extra?: string }).extra}
+                  </Link>
+                )}
               </CardFooter>
             </Card>
           ))}

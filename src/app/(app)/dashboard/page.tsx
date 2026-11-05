@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   );
   const invoices = await db.invoice.findMany({
     where: { client: { freelancerId: freelancer.id } },
-    include: { client: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } }, tasks: { where: { done: false }, take: 1 } },
+    include: { client: true, planGroup: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } }, tasks: { where: { done: false }, take: 1 } },
     orderBy: { dueDate: "asc" },
   });
   const now = new Date();
@@ -30,7 +30,19 @@ export default async function DashboardPage() {
   const overdue = open.filter((i) => daysOverdue(i, now) > 0);
   const dueThisWeek = open.filter((i) => i.dueDate >= now && i.dueDate <= weekAhead);
 
-  const rows: ReceivableRow[] = invoices.map((i) => {
+  // A payment plan's parts, in due order, so each shows as "Part 1 of 2" under its original invoice.
+  const parts = new Map<string, typeof invoices>();
+  for (const i of invoices) if (i.planGroup) parts.set(i.planGroup.originalInvoiceId, [...(parts.get(i.planGroup.originalInvoiceId) ?? []), i].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime()));
+  const partOf = new Map([...parts.values()].flatMap((ps) => ps.map((p, n) => [p.id, `Part ${n + 1} of ${ps.length}`] as const)));
+  const originalIds = new Set(invoices.map((i) => i.id));
+  const isPart = (i: (typeof invoices)[number]) => !!i.planGroup && originalIds.has(i.planGroup.originalInvoiceId);
+  // Most overdue first, then by due date; each plan's parts follow their original.
+  const ordered = invoices
+    .filter((i) => !isPart(i))
+    .sort((a, b) => daysOverdue(b, now) - daysOverdue(a, now) || a.dueDate.getTime() - b.dueDate.getTime())
+    .flatMap((i) => [i, ...(parts.get(i.id) ?? [])]);
+
+  const rows: ReceivableRow[] = ordered.map((i) => {
     const pending = i.case?.actions[0];
     const overdue = daysOverdue(i, now);
     const nextAction = i.tasks.length
@@ -40,7 +52,7 @@ export default async function DashboardPage() {
         : i.status === "DRAFT"
           ? "Send the draft"
           : !isOpen(i)
-            ? ""
+            ? "—"
             : i.case?.state === "dispute"
               ? "Resolve the dispute yourself"
               : i.case?.state === "paused"
@@ -52,13 +64,14 @@ export default async function DashboardPage() {
     return {
       id: i.id,
       client: i.client.name,
-      invoice: i.invoiceNumber ?? (i.status === "DRAFT" ? "Draft" : "Local only"),
+      invoice: partOf.get(i.id) ?? i.invoiceNumber ?? (i.status === "DRAFT" ? "Draft" : "Local only"),
+      isPart: partOf.has(i.id),
       status: overdue > 0 ? "OVERDUE" : i.status,
       dueDate: i.dueDate.toISOString().slice(0, 10),
       daysOverdue: overdue,
       outstanding: owed,
       outstandingText: formatMoney(owed, i.currency),
-      reason: i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "",
+      reason: i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : !isOpen(i) ? "—" : partOf.has(i.id) ? "Payment plan" : "",
       nextAction,
     };
   });

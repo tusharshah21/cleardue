@@ -4,6 +4,7 @@ import { appUrl } from "@/lib/app-url";
 import { ProposalCard } from "@/components/proposal-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireFreelancer } from "@/lib/auth";
@@ -161,7 +162,9 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
                 </a>
               </p>
             )}
-            <p className="text-muted-foreground">Client page: {payLink}</p>
+            <a href={payLink} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Open client&apos;s pay page
+            </a>
           </div>
         </CardContent>
       </Card>

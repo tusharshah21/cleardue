@@ -4,7 +4,7 @@ Target length: 2:42 (hard limit 2:45; the video must stay under 3:00). Record at
 
 | Time | Screen | Voiceover |
 | --- | --- | --- |
-| 0:00 to 0:10 | Title card: "85% of freelancers have been paid late." Source line underneath. | "85% of freelancers have been paid late. For a solo designer in India billing clients in New York, London and Sydney, chasing those invoices is a second job." |
+| 0:00 to 0:10 | Title card: "91% of surveyed New York freelancers have been paid late at least once." Source line underneath. | "91% of surveyed New York freelancers say they have been paid late at least once. For a solo designer in India billing clients in New York, London and Sydney, chasing those invoices is a second job." |
 | 0:10 to 0:22 | Dashboard: AG Grid with Acme (USD 2,400), Brightside (GBP 1,800), Koala (AUD 3,200), all real PayPal sandbox invoices. | "This is ClearDue. Meet Aarav, a freelancer in India. Three clients, three PayPal invoices, three different reasons they haven't paid. ClearDue's job is to find out why, and do the right thing about it." |
 | 0:22 to 0:57 | Acme invoice (autopilot on). Dana's reply: "waiting on finance sign-off". Click **Diagnose now**; the stages tick through reading, diagnosing, proposing. Result: Awaiting approval, with the quoted evidence. The actions panel shows the PayPal reminder to Acme's AP contact and a one-week pause, both marked "Done by autopilot" with the mandate reason "within mandate". Timeline: "Autopilot sent a PayPal reminder to the client and their AP contact". On-screen text: **"No click: within Aarav's mandate"**. | "Dana from Acme says it's waiting on finance. ClearDue diagnoses it: awaiting approval, with Dana's own words as evidence. So it doesn't nag Dana. It sends the PayPal reminder straight to Acme's accounts payable team and pauses reminders for a week. Nobody clicked anything: Aarav turned on autopilot for Acme, and every action passed his mandate, plain TypeScript rules for tone, quiet hours and who can be contacted." |
 | 0:57 to 1:07 | Acme invoice > **Client asking for more?** Paste "Could you also build the dashboard in React?" Result: OUT_OF_SCOPE with two quoted clauses, 32 h. Click **Add to draft invoice**. | "Then Dana asks for a React build. ClearDue checks the statement of work: front-end development is out of scope. It quotes the clause and drafts a PayPal invoice line for 32 hours." |
@@ -26,4 +26,4 @@ Target length: 2:42 (hard limit 2:45; the video must stay under 3:00). Record at
 
 ## Source for the opening line
 
-85% of freelancers have experienced late payment: [Plutio, citing Freelancers Union](https://www.plutio.com/freelancer-magazine/late-invoice-payments).
+91% of surveyed New York freelance workers "reported experiencing late or overdue wages at least once in their career": [Authors Guild, Freelancers Union and others](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment).

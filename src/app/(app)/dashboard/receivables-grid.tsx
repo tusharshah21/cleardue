@@ -11,6 +11,8 @@ export interface ReceivableRow {
   id: string;
   client: string;
   invoice: string;
+  /** A part of a payment plan, shown under its original invoice. */
+  isPart: boolean;
   status: string;
   dueDate: string;
   daysOverdue: number;
@@ -30,13 +32,13 @@ const columns: ColDef<ReceivableRow>[] = [
     cellRenderer: (p: ICellRendererParams<ReceivableRow>) =>
       p.data && (
         <Link href={`/invoices/${p.data.id}`} className="font-medium hover:underline">
+          {p.data.isPart && <span aria-hidden className="mr-1 text-muted-foreground">↳</span>}
           {p.value}
         </Link>
       ),
   },
-  { field: "invoice", headerName: "Invoice", width: 100 },
+  { field: "invoice", headerName: "Invoice", width: 120 },
   { field: "status", width: 190, valueFormatter: (p) => invoiceStatusLabel(String(p.value ?? ""), p.data?.daysOverdue), cellRenderer: (p: ICellRendererParams<ReceivableRow>) => <StatusBadge status={String(p.value ?? "")} overdueDays={p.data?.daysOverdue} /> },
-  { field: "daysOverdue", headerName: "Days late", width: 110, filter: false, type: "numericColumn", sort: "desc", valueFormatter: (p) => (p.value > 0 ? String(p.value) : "") },
   { field: "outstanding", headerName: "Outstanding", width: 140, type: "numericColumn", valueFormatter: (p) => p.data?.outstandingText ?? "", filter: false },
   { field: "reason", headerName: "Reason", width: 160, valueFormatter: (p) => p.value || "Not diagnosed yet" },
   { field: "nextAction", headerName: "Next action", flex: 1.5, minWidth: 200, tooltipField: "nextAction" },
