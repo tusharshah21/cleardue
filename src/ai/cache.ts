@@ -26,10 +26,14 @@ export interface CacheRequest {
   parts: unknown[];
 }
 
+/** Bump to retire every cached result at once (older rows stay in the table but never match again). Used when the cache
+ * must not be reused, for example before a recording that should show live answers. `npm run cache:clear` also deletes rows. */
+export const CACHE_EPOCH = "2026-11-05-live";
+
 const modelName = (m: LanguageModel) => (typeof m === "string" ? m : `${m.provider}/${m.modelId}`);
 
 export const cacheKey = (model: LanguageModel, req: CacheRequest) =>
-  createHash("sha256").update(JSON.stringify([modelName(model), req.scope?.seed, req.task, req.parts])).digest("hex");
+  createHash("sha256").update(JSON.stringify([CACHE_EPOCH, modelName(model), req.scope?.seed, req.task, req.parts])).digest("hex");
 
 export async function readCache(model: LanguageModel, req: CacheRequest): Promise<unknown | undefined> {
   if (!req.scope) return undefined;
