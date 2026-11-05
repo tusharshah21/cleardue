@@ -71,14 +71,14 @@ export default async function DashboardPage() {
       daysOverdue: overdue,
       outstanding: owed,
       outstandingText: formatMoney(owed, i.currency),
-      reason: i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : !isOpen(i) ? "—" : partOf.has(i.id) ? "Payment plan" : "",
+      reason: !isOpen(i) && i.status !== "DRAFT" ? "—" : i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : partOf.has(i.id) ? "Payment plan" : "",
       nextAction,
     };
   });
 
   const stats = [
-    { label: "Total owed", value: sumByCurrency(open), hint: `${open.length} open invoices` },
-    { label: "Overdue", value: sumByCurrency(overdue), hint: `${overdue.length} invoices past due` },
+    { label: "Total owed", value: sumByCurrency(open), hint: `${open.length} open invoice${open.length === 1 ? "" : "s"}` },
+    { label: "Overdue", value: sumByCurrency(overdue), hint: `${overdue.length} invoice${overdue.length === 1 ? "" : "s"} past due` },
     { label: "Expected this week", value: sumByCurrency(dueThisWeek), hint: `${dueThisWeek.length} due in 7 days` },
   ];
 
