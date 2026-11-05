@@ -18,6 +18,7 @@ import { daysOverdue, isOpen } from "@/lib/receivables";
 import { checkAction, effectiveMandate, type MandateContext } from "./mandate";
 import { toolkitTools, TOOLKIT_TOOLS, type ToolkitToolName } from "./toolkit";
 import { applyPlan } from "@/plans/accept";
+import { supersedePending } from "./supersede";
 import { buildAgentTools, draftOf, planInstalments, toAction, type GateContext, type GateHooks, type Proposal } from "./tools";
 
 const DAY = 86_400_000;
@@ -226,7 +227,7 @@ export async function analyzeInvoice(invoiceId: string, freelancerId: string, mo
   );
 
   // Pending proposals from an earlier run are superseded by this one.
-  await db.proposedAction.updateMany({ where: { caseId: kase.id, status: "pending" }, data: { status: "rejected", decidedAt: now, result: json({ superseded: true }) } });
+  await supersedePending(kase.id, invoiceId, "replaced by a new diagnosis");
 
   const ctx = gateContext(invoice, kase, now);
   const counter = { n: 0 };

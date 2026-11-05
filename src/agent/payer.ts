@@ -9,6 +9,7 @@ import { fromMinor } from "@/lib/money";
 import { isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
 import { planOptions } from "@/plans/accept";
+import { supersedePending } from "./supersede";
 import type { Instalment } from "./mandate";
 
 export async function loadPayInvoice(payToken: string) {
@@ -85,7 +86,7 @@ export async function askPayer(payToken: string, question: string, model: Langua
       create: { invoiceId: invoice.id, reason: "dispute", state: "dispute", summary: "The client raised a complaint on the pay page." },
       update: { state: "dispute", reason: "dispute", pausedUntil: null },
     });
-    await db.proposedAction.updateMany({ where: { caseId: kase.id, status: "pending" }, data: { status: "rejected", decidedAt: new Date(), result: { superseded: "complaint on pay page" } } });
+    await supersedePending(kase.id, invoice.id, "the client raised a complaint on the pay page");
     await db.task.create({ data: { invoiceId: invoice.id, kind: "complaint", summary: "Client complaint on the pay page; automation stopped", detail: question } });
     await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase.id, kind: "dispute_opened", summary: "Complaint on the pay page: case moved to dispute, automation stopped" } });
   } else if (a.escalate) {

@@ -149,7 +149,7 @@ model ProposedAction {
   confidence     Float?
   mandateVerdict String // allow | needs_approval | deny
   mandateReasons Json
-  status         String    @default("pending") // pending | auto_executed | executed | rejected | denied | failed
+  status         String    @default("pending") // pending | auto_executed | executed | rejected | superseded | denied | failed
   result         Json?
   createdAt      DateTime  @default(now())
   decidedAt      DateTime?

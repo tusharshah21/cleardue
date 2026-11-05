@@ -95,6 +95,7 @@ export const STATUS_LABELS: Record<string, string> = {
   auto_executed: "Done by autopilot",
   executed: "Approved and done",
   rejected: "Rejected",
+  superseded: "Superseded",
   denied: "Blocked by mandate",
   failed: "Failed",
 };

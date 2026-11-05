@@ -69,7 +69,7 @@ function OwesWidget(params: Params) {
           <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
             <div className="min-w-[9rem] flex-1">
               <p className="font-medium">{String(r["Client"] ?? "")}</p>
-              <p className="text-xs text-muted-foreground">Invoice {String(r["Invoice"] ?? "")}</p>
+              <p className="text-xs text-muted-foreground">{String(r["Invoice"] ?? "").startsWith("Part ") ? String(r["Invoice"]) : `Invoice ${String(r["Invoice"] ?? "")}`}</p>
             </div>
             <p className="w-28 text-right font-medium tabular-nums">{money(r["Outstanding"], r["Currency"])}</p>
             <span className={`rounded-full px-2 py-0.5 text-xs ${late > 0 ? "bg-red-100 text-red-800" : "bg-muted text-muted-foreground"}`}>{late > 0 ? `${late} day${late === 1 ? "" : "s"} late` : "Not due yet"}</span>

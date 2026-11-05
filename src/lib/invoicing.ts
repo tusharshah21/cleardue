@@ -5,6 +5,7 @@ import type { Client, Freelancer, Invoice } from "@/generated/prisma/client";
 import { toMinor } from "@/lib/money";
 import { createDraftInvoice, getInvoice, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
 import { INVOICE_EVENTS, invoiceIdOf, type WebhookEventBody } from "@/paypal/webhooks";
+import { supersedePending } from "@/agent/supersede";
 import { db } from "./db";
 
 export const newPayToken = () => randomBytes(24).toString("base64url");
@@ -138,7 +139,7 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
   });
   if (kase && CLOSED.includes(updated.status) && kase.state !== "resolved") {
     await db.case.update({ where: { id: kase.id }, data: { state: "resolved", pausedUntil: null } });
-    await db.proposedAction.updateMany({ where: { caseId: kase.id, status: "pending" }, data: { status: "rejected", decidedAt: new Date(), result: { superseded: `invoice ${updated.status}` } } });
+    await supersedePending(kase.id, invoice.id, `the invoice is now ${updated.status.replaceAll("_", " ").toLowerCase()}`);
     await db.timelineEvent.create({
       data: { invoiceId: invoice.id, caseId: kase.id, kind: "case_resolved", summary: `Case closed: invoice is ${updated.status.replaceAll("_", " ").toLowerCase()}` },
     });

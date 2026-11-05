@@ -22,7 +22,10 @@ const json = (v: unknown) => JSON.parse(JSON.stringify(v ?? null)) as Prisma.Inp
 export interface ReceivableRow {
   invoiceId: string;
   client: string;
+  /** The invoice number, or "Part 1 of 2, payment plan for invoice 0070" for an outstanding part of an accepted plan. */
   invoice: string;
+  /** For a plan part, the number of the invoice the plan replaced. */
+  planPartOf: string | null;
   currency: string;
   outstanding: number;
   daysOverdue: number;
@@ -51,24 +54,32 @@ export interface PlanPartRow {
 }
 
 export async function receivablesFor(freelancerId: string, now = new Date()): Promise<ReceivableRow[]> {
+  // Every invoice, plan parts included: the dashboard's "Total owed" counts the parts, so the analyst must too.
   const invoices = await db.invoice.findMany({
-    where: { client: { freelancerId }, planGroupId: null },
-    include: { client: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } } },
+    where: { client: { freelancerId } },
+    include: { client: true, planGroup: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } } },
   });
+  const numberOf = new Map(invoices.map((i) => [i.id, i.invoiceNumber ?? i.id.slice(-6)]));
+  const siblings = new Map<string, typeof invoices>();
+  for (const i of invoices) if (i.planGroupId) siblings.set(i.planGroupId, [...(siblings.get(i.planGroupId) ?? []), i].sort((x, y) => x.dueDate.getTime() - y.dueDate.getTime()));
   return invoices
     .filter(isOpen)
     .map((i) => {
       const pending = i.case?.actions[0];
+      const group = i.planGroupId ? siblings.get(i.planGroupId) ?? [] : [];
+      const isPart = !!i.planGroup && group.length > 0;
+      const label = isPart ? `Part ${group.indexOf(i) + 1} of ${group.length}, payment plan for invoice ${numberOf.get(i.planGroup!.originalInvoiceId) ?? "?"}` : (i.invoiceNumber ?? i.id.slice(-6));
       return {
         invoiceId: i.id,
         client: i.client.name,
-        invoice: i.invoiceNumber ?? i.id.slice(-6),
+        invoice: label,
+        planPartOf: isPart ? (numberOf.get(i.planGroup!.originalInvoiceId) ?? null) : null,
         currency: i.currency,
         outstanding: Number(fromMinor(i.totalMinor - i.paidMinor, i.currency)),
         daysOverdue: daysOverdue(i, now),
         status: invoiceStatusLabel(i.status, daysOverdue(i, now)),
-        reason: i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "Not diagnosed",
-        nextAction: pending ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}` : i.case?.reason ? "Waiting on the client" : "Run Diagnose now",
+        reason: isPart ? "Payment plan" : i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "Not diagnosed",
+        nextAction: isPart ? (daysOverdue(i, now) > 0 ? "Plan part is overdue: remind the client" : "Waiting for the due date") : pending ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}` : i.case?.reason ? "Waiting on the client" : "Run Diagnose now",
       };
     })
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
@@ -192,7 +203,7 @@ export function analystTools(freelancerId: string): ToolSet {
       },
     });
   return {
-    get_receivables: tool({ description: "Open invoices: client, outstanding amount, days overdue, diagnosed reason, next action. One row per open invoice.", inputSchema: z.object({}), execute: () => receivablesFor(freelancerId) }),
+    get_receivables: tool({ description: "Open receivables: client, outstanding amount, days overdue, diagnosed reason, next action. One row per open invoice, and one per unpaid part of an accepted payment plan (labelled as a plan part of its original invoice; the replaced original is not listed, so the amounts add up to what is owed).", inputSchema: z.object({}), execute: () => receivablesFor(freelancerId) }),
     get_decisions: tool({ description: "The latest agent proposals with the mandate's verdict (allow, needs_approval or deny), outcome and reasons.", inputSchema: z.object({}), execute: () => decisionsFor(freelancerId) }),
     get_plans: tool({ description: "Payment plans: each instalment's client, amount, due date and status.", inputSchema: z.object({}), execute: () => plansFor(freelancerId) }),
     ...Object.fromEntries(ANALYST_TOOLS.map((n) => [`propose_${n}`, write(n)])),
