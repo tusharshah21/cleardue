@@ -12,7 +12,8 @@ import { pendingAcceptance, planOptions } from "@/plans/accept";
 import { strategyFor } from "@/plans/plans";
 import type { LineItem } from "@/paypal/invoices";
 import { PayChat, type ChatEntry } from "./pay-chat";
-import { AutoRefresh, PlanOption } from "./plan-options";
+import { sandboxTestPayEnabled } from "@/lib/sandbox-pay";
+import { AutoRefresh, MarkPaid, PlanOption } from "./plan-options";
 
 export const metadata: Metadata = { title: "Invoice", robots: { index: false } };
 
@@ -31,6 +32,7 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
   const plan = await db.planGroup.findUnique({ where: { originalInvoiceId: invoice.id }, include: { invoices: { orderBy: { dueDate: "asc" } } } });
   const awaiting = open && !plan?.invoices.length ? await pendingAcceptance(invoice.id) : null;
   const options = open && !plan?.invoices.length && !awaiting ? await planOptions(invoice) : [];
+  const testPay = sandboxTestPayEnabled();
   const history: ChatEntry[] = invoice.payerQuestions.map((q) => ({
     question: q.question,
     answer: q.answer,
@@ -93,9 +95,12 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
           ) : plan?.invoices.length ? (
             <p className="rounded-lg bg-muted p-3 text-sm">This invoice was replaced by the payment plan below.</p>
           ) : open && invoice.payerViewUrl ? (
-            <a href={invoice.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "lg", className: "w-full" })}>
-              Pay with PayPal
-            </a>
+            <div className="space-y-3">
+              <a href={invoice.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "lg", className: "w-full" })}>
+                Pay with PayPal
+              </a>
+              {testPay && <MarkPaid token={token} invoiceId={invoice.id} />}
+            </div>
           ) : open ? (
             <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">The PayPal payment link isn&apos;t ready yet. Check the invoice email from PayPal, or ask below.</p>
           ) : (
@@ -125,9 +130,12 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-muted-foreground">{isPaid(p.status) ? "Paid, thank you." : `Due ${ymd(p.dueDate)}`}</span>
                   {isPaid(p.status) ? null : isOpen(p) && p.payerViewUrl ? (
-                    <a href={p.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "sm" })}>
-                      Pay with PayPal
-                    </a>
+                    <div className="flex flex-wrap items-start gap-2">
+                      <a href={p.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "sm" })}>
+                        Pay with PayPal
+                      </a>
+                      {testPay && <MarkPaid token={token} invoiceId={p.id} size="sm" />}
+                    </div>
                   ) : isOpen(p) ? (
                     <span className="text-xs text-muted-foreground">Being sent, ready in a moment</span>
                   ) : null}

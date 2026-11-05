@@ -1,6 +1,8 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { rateLimit } from "@/lib/rate-limit";
+import { markPaidSandbox } from "@/lib/sandbox-pay";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -292,6 +294,20 @@ export async function simulatePaymentAction(paypalInvoiceId: string): Promise<Fo
   } catch (e) {
     return { error: errorText(e) };
   }
+  revalidatePath("/", "layout");
+  return {};
+}
+
+/** Public (pay page), sandbox only: records a test payment on the PayPal sandbox invoice. Rate limited per link and per IP. */
+export async function markPaidSandboxAction(payToken: string, invoiceId: string): Promise<FormState> {
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  if (!rateLimit(`markpaid:${payToken}`, 5, 60_000) || !rateLimit(`markpaid-ip:${ip}`, 10, 60_000)) return { error: "Too many attempts. Please wait a minute." };
+  try {
+    await markPaidSandbox(payToken, invoiceId);
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath(`/pay/${payToken}`);
   revalidatePath("/", "layout");
   return {};
 }

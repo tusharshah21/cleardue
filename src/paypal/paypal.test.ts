@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAccessToken, PayPalError, paypalRequest, resetTokenCache } from "./client";
+import { checkPayPalAuth, getAccessToken, PayPalError, paypalRequest, resetAuthCheck, resetTokenCache } from "./client";
 import { buildInvoiceBody, createDraftInvoice, sendInvoice, updateDraftInvoice } from "./invoices";
 import { invoiceIdOf, verifyWebhookSignature } from "./webhooks";
 
@@ -11,6 +11,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   resetTokenCache();
+  resetAuthCheck();
   vi.stubEnv("PAYPAL_MODE", "sandbox");
   vi.stubEnv("PAYPAL_CLIENT_ID", "id");
   vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
@@ -174,5 +175,43 @@ describe("invoices", () => {
       .mockResolvedValueOnce(token())
       .mockResolvedValueOnce(json({ href: "https://www.sandbox.paypal.com/invoice/p/#INV2-1", rel: "payer-view", method: "GET" }));
     await expect(sendInvoice("INV2-1")).resolves.toEqual({ payerViewUrl: "https://www.sandbox.paypal.com/invoice/p/#INV2-1" });
+  });
+});
+
+describe("credential watch", () => {
+  const rejected = () => json({ error: "invalid_client", error_description: "Client Authentication failed" }, 401);
+
+  it("is ok when PayPal issues a token, and remembers that for 5 minutes", async () => {
+    fetchMock.mockResolvedValueOnce(token());
+    expect(await checkPayPalAuth(1_000)).toEqual({ ok: true });
+    expect(await checkPayPalAuth(1_000 + 4 * 60_000)).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockResolvedValueOnce(token());
+    await checkPayPalAuth(1_000 + 6 * 60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks PayPal afresh even when a token is cached, so a revoked secret shows up", async () => {
+    fetchMock.mockResolvedValueOnce(token());
+    await getAccessToken();
+    fetchMock.mockResolvedValueOnce(rejected());
+    const s = await checkPayPalAuth();
+    expect(s.ok).toBe(false);
+    expect(s.problem).toBe("rejected");
+    expect(s.error).toContain("Client Authentication failed");
+  });
+
+  it("tells a rejection from an outage and from missing config", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("socket hang up"));
+    expect((await checkPayPalAuth()).problem).toBe("unreachable");
+    resetAuthCheck();
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "");
+    expect((await checkPayPalAuth()).problem).toBe("unconfigured");
+  });
+
+  it("is always ok in mock mode and never calls PayPal", async () => {
+    vi.stubEnv("PAYPAL_MODE", "mock");
+    expect(await checkPayPalAuth()).toEqual({ ok: true });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

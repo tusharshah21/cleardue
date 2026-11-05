@@ -81,6 +81,10 @@ async function toError(res: Response): Promise<PayPalError> {
 
 export async function getAccessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+  return fetchAccessToken();
+}
+
+async function fetchAccessToken(): Promise<string> {
   const { base, id, secret } = config();
   const res = await timedFetch(`${base}/v1/oauth2/token`, {
     method: "POST",
@@ -128,4 +132,37 @@ export async function paypalRequest<T>(path: string, opts: RequestOptions = {}, 
   if (!res.ok) throw await toError(res);
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export interface PayPalAuthStatus {
+  ok: boolean;
+  /** "rejected" = PayPal refused the credentials (revoked or wrong); "unreachable" = couldn't ask; "unconfigured" = not set. */
+  problem?: "rejected" | "unreachable" | "unconfigured";
+  error?: string;
+}
+
+let authCheck: { at: number; status: PayPalAuthStatus } | null = null;
+const AUTH_CHECK_TTL_MS = 5 * 60_000;
+
+/** Asks PayPal for a fresh token (a cached token could outlive a revoked secret) and remembers the answer for 5 minutes,
+ * so health checks and page loads don't hammer the auth endpoint. */
+export async function checkPayPalAuth(now = Date.now()): Promise<PayPalAuthStatus> {
+  if (authCheck && now - authCheck.at < AUTH_CHECK_TTL_MS) return authCheck.status;
+  let status: PayPalAuthStatus;
+  try {
+    if (isMockMode()) status = { ok: true };
+    else {
+      await fetchAccessToken();
+      status = { ok: true };
+    }
+  } catch (e) {
+    const err = e as PayPalError;
+    status = { ok: false, problem: err.status === 401 || err.status === 400 ? "rejected" : err.status === 0 ? "unconfigured" : "unreachable", error: err.message };
+  }
+  authCheck = { at: now, status };
+  return status;
+}
+
+export function resetAuthCheck() {
+  authCheck = null;
 }

@@ -241,13 +241,13 @@ Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`)
 
 For judges (also pasted into Devpost):
 
-1. Open the hosted demo, <https://cleardue-6laj.onrender.com>, and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. PayPal runs in the sandbox: every invoice and payment is fake money, and no real money moves.
+1. Open the hosted demo, <https://cleardue-6laj.onrender.com>, and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. The hosted demo runs on a PayPal sandbox app whose credentials aren't in the repo: every invoice and payment is fake money, and no real money moves.
 
-   To pay as the client, use the shared PayPal sandbox buyer account: email `SANDBOX_BUYER_EMAIL`, password `SANDBOX_BUYER_PASSWORD` (placeholders until the account is set up). It is a sandbox-only personal account with fake money; it works only on sandbox.paypal.com, not on real PayPal.
+   To pay a client invoice you have two options on its pay page: **Pay with PayPal** opens PayPal's sandbox checkout, where you can sign in with your own sandbox personal account; or **Mark as paid (sandbox test)** records the payment through the Invoicing API, with no account needed. Either way PayPal's signed webhook marks the invoice paid and closes the case.
 2. You land on **Start here**, with three stories, each about a minute:
    - **Acme Labs, autopilot acts with no click.** Open Acme's invoice and click **Diagnose now**. The agent reads Dana's "waiting on finance sign-off" reply, then sends a PayPal reminder to Acme's AP contact and pauses reminders. Both show on the timeline as done by autopilot, within the mandate; Approvals stays empty.
    - **Brightside Studio, approval path and a payment plan.** Open Brightside's invoice and click **Diagnose now** (Sam: "cash is tight this month"). Open the pay page link and accept a two-part plan: autopilot is off for this client, so the page says Aarav will confirm. Approve it under **Approvals**; the pay page updates to two smaller PayPal invoices.
-   - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay with PayPal opens PayPal's sandbox checkout, where you sign in with the sandbox buyer account above (or any sandbox personal account of your own); the webhook marks the invoice paid and closes the case.
+   - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay it with either option above; the invoice shows **Paid (recorded)** or **Paid**, and the case closes.
 3. If a story is already finished (another judge got there first), click **Reset demo** on Start here (at most once every 5 minutes). The demo also resets itself daily at 03:00 UTC.
 
 Acme's reminder is client contact, so the mandate holds it during the client's quiet hours (20:00 to 08:00 New York time). At night there, Start here says so: the diagnosis still runs and the reminder waits in Approvals. For autopilot acting at night, use Koala's plan, or try Acme during New York daytime.
@@ -282,7 +282,7 @@ See [.env.example](.env.example). Never commit `.env`.
 
 ## Deploy (Render + Neon)
 
-`GET /api/health` is the Render health check. `GET /api/health/db` also reports `lastScheduledSyncAt` (when the sync cron last called `/api/sync`) and `lastDailyResetAt`, and Start here shows "Last automatic sync: X min ago". A `null` sync time well after a deploy means the cron job isn't running.
+`GET /api/health` is the Render health check. `GET /api/health/db` also reports `lastScheduledSyncAt` (when the sync cron last called `/api/sync`) and `lastDailyResetAt`, and Start here shows "Last automatic sync: X min ago". A `null` sync time well after a deploy means the cron job isn't running. It also reports `paypal`: a fresh sandbox token fetch (remembered for 5 minutes). If PayPal rejects the app's credentials, `paypal.ok` is false with the reason, and Start here shows a warning.
 
 1. Create a Neon Postgres database and copy its connection string.
 2. In Render, create a Blueprint from this repo; it picks up [render.yaml](render.yaml) (Starter web service and the sync cron job).

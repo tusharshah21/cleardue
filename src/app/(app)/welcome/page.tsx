@@ -8,6 +8,7 @@ import { effectiveMandate, inQuietHours } from "@/agent/mandate";
 import { db } from "@/lib/db";
 import { ago, readTimes } from "@/lib/app-state";
 import { nextScheduledReset } from "@/lib/demo-seed";
+import { checkPayPalAuth } from "@/paypal/client";
 import { LocalTime } from "./local-time";
 import { ResetDemo } from "./reset-demo";
 
@@ -51,6 +52,7 @@ export default async function WelcomePage() {
   });
   const now = new Date();
   const { lastScheduledSyncAt } = await readTimes();
+  const paypal = await checkPayPalAuth();
   const stories = STORIES.flatMap((s) => {
     const invoice = invoices.find((i) => i.client.name === s.client);
     if (!invoice) return [];
@@ -67,6 +69,12 @@ export default async function WelcomePage() {
         <h1 className="text-2xl font-semibold text-balance">85% of freelancers have been paid late. ClearDue finds out why each client hasn&apos;t paid and acts on it through PayPal, inside limits the freelancer sets.</h1>
         <p className="text-muted-foreground">You&apos;re signed in as {freelancer.name}, a designer in India with three overseas clients. Each story below takes a minute.</p>
       </div>
+
+      {!paypal.ok && paypal.problem !== "unreachable" && (
+        <p role="alert" className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
+          PayPal is rejecting the sandbox credentials this app uses ({paypal.error}). Invoices, reminders and payments will fail until they are replaced in the server settings.
+        </p>
+      )}
 
       {stories.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-3">
