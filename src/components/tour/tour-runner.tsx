@@ -24,20 +24,24 @@ const storage = () => {
 const isNarrow = () => window.matchMedia("(max-width: 767px)").matches;
 const find = (name: string) => document.querySelector<HTMLElement>(`[data-tour="${name}"]`);
 
-/** Targets can appear a moment after hydration (and the analyst widgets later still), so wait briefly before falling back. */
-async function waitFor(name: string, ms = 2500): Promise<HTMLElement | null> {
-  const end = Date.now() + ms;
-  for (;;) {
-    const el = find(name);
-    if (el) return el;
-    if (Date.now() > end) return null;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-}
+/** Driver.js adds classes to <body> and to the target, so never start while React is still hydrating the page (that causes a
+ * hydration mismatch): wait for the load event, then a moment for the streamed parts to hydrate. Once per page load. */
+let hydrated: Promise<void> | null = null;
+const afterHydration = () =>
+  (hydrated ??= new Promise<void>((resolve) => {
+    const done = () => setTimeout(resolve, 600);
+    if (document.readyState === "complete") done();
+    else window.addEventListener("load", done, { once: true });
+  }));
 
 function linksOnPage(): TourLinks {
   const href = (n: string) => document.querySelector<HTMLAnchorElement>(`[data-tour="${n}"]`)?.getAttribute("href") ?? undefined;
-  return { acme: href("open-acme"), koala: href("open-koala") };
+  const links: TourLinks = {};
+  const acme = href("open-acme");
+  const koala = href("open-koala");
+  if (acme) links.acme = acme;
+  if (koala) links.koala = koala; // only what this page has: an empty value must not wipe a saved link
+  return links;
 }
 
 export function TourRunner() {
@@ -47,9 +51,11 @@ export function TourRunner() {
   const active = useRef<Driver | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const runId = useRef(0);
   const [offer, setOffer] = useState(false);
 
   const stop = useCallback(() => {
+    runId.current++; // any step still waiting for its target is cancelled
     cleanup.current?.();
     cleanup.current = null;
     const d = active.current;
@@ -68,15 +74,31 @@ export function TourRunner() {
   const show = useCallback(
     async (index: number) => {
       stop();
+      const mine = ++runId.current;
       const step = STEPS[index];
+      await afterHydration();
+      if (mine !== runId.current) return;
       const narrow = isNarrow();
-      let target = narrow ? null : await waitFor(step.target);
+      let target: HTMLElement | null = null;
       let text = step.text;
-      // Step 5 before the first diagnosis: no verdict exists yet, so point at the Diagnose button instead (never click it).
-      if (!target && !narrow && step.alt) {
-        target = await waitFor(step.alt.target, 600);
-        if (target) text = step.alt.text;
+      if (!narrow) {
+        // Step 5 before the first diagnosis: no verdict exists yet, so point at the Diagnose area instead (never click it).
+        // Both are on the page from the start, so the fallback is chosen after a short grace period, not a long wait.
+        const t0 = Date.now();
+        for (;;) {
+          target = find(step.target);
+          if (target) break;
+          const alt = step.alt && Date.now() - t0 > 400 ? find(step.alt.target) : null;
+          if (alt) {
+            target = alt;
+            text = step.alt!.text;
+            break;
+          }
+          if (Date.now() - t0 > 2500) break;
+          await new Promise((r) => setTimeout(r, 100));
+        }
       }
+      if (mine !== runId.current) return;
       const go = (to: number) => {
         stop();
         if (to < 0) return;
@@ -118,7 +140,7 @@ export function TourRunner() {
         showButtons: index === 0 ? ["next", "close"] : ["previous", "next", "close"],
         nextBtnText: last ? "Done" : "Next",
         prevBtnText: "Back",
-        doneBtnText: "Done",
+        doneBtnText: last ? "Done" : "Next", // each step is its own one-step tour, so Driver always treats it as the last
         onNextClick: () => go(index + 1),
         onPrevClick: () => go(index - 1),
         onCloseClick: () => end(),
@@ -237,7 +259,7 @@ export function TourRunner() {
 /** The "Take the tour" button on Start here. On a phone it says so: the tour is made for a larger screen. */
 export function TakeTourButton() {
   return (
-    <div className="flex flex-wrap items-center gap-3" data-tour="take-tour">
+    <div className="inline-flex flex-wrap items-center gap-3" data-tour="take-tour">
       <Button type="button" variant="outline" onClick={startTour}>
         Take the tour
       </Button>

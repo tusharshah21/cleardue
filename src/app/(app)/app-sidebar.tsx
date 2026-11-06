@@ -39,11 +39,8 @@ function Brand({ businessName }: { businessName: string }) {
           </motion.span>
         )}
       </Link>
-      {open && businessName && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-1 truncate text-xs text-muted-foreground">
-          {businessName}
-        </motion.p>
-      )}
+      {/* Always reserve this line: if it only appeared when the rail opens, every item would jump down as the pointer arrives. */}
+      {businessName && <p className={`mt-1 h-4 truncate text-xs text-muted-foreground ${open ? "" : "invisible"}`}>{businessName}</p>}
     </div>
   );
 }

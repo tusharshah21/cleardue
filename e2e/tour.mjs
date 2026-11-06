@@ -26,7 +26,7 @@ async function freshPage(viewport = { width: 1440, height: 900 }) {
   const page = await ctx.newPage();
   const posts = [];
   page.on("request", (r) => {
-    if (r.method() === "POST") posts.push(r.url());
+    if (r.method() === "POST" && !r.url().includes("__nextjs")) posts.push(r.url()); // dev-server overlay calls are not the app
   });
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await page.fill("#email", EMAIL);
@@ -85,7 +85,7 @@ const popover = (page) => page.locator(".driver-popover.cleardue-tour");
     const info = await page.evaluate(() => ({
       title: document.querySelector(".cleardue-tour .driver-popover-title")?.textContent,
       text: document.querySelector(".cleardue-tour .driver-popover-description")?.textContent,
-      spotlight: !!document.querySelector(".driver-active-element"),
+      spotlight: !!!document.querySelector("#driver-dummy-element"),
       focusInside: !!document.activeElement?.closest(".cleardue-tour"),
       label: document.querySelector(".cleardue-tour")?.getAttribute("aria-label"),
       skip: !!document.querySelector(".cleardue-tour-skip"),
@@ -149,7 +149,7 @@ const popover = (page) => page.locator(".driver-popover.cleardue-tour");
   await page.keyboard.press("Escape");
   await page.evaluate(() => window.dispatchEvent(new Event("cleardue:start-tour")));
   await popover(page).waitFor({ timeout: 15000 });
-  const centred = await page.evaluate(() => !document.querySelector(".driver-active-element"));
+  const centred = await page.evaluate(() => !!document.querySelector("#driver-dummy-element"));
   check("a missing target shows the same text in a centred popover", centred);
   await ctx.close();
 }
@@ -163,7 +163,7 @@ const popover = (page) => page.locator(".driver-popover.cleardue-tour");
   check("phone: Take the tour button with a larger-screen note", (await page.getByText("Works best on a larger screen.").isVisible()) && (await page.getByRole("button", { name: "Take the tour" }).first().isVisible()));
   await page.getByRole("button", { name: "Take the tour" }).first().click();
   await popover(page).waitFor({ timeout: 10000 });
-  check("phone: popover is centred without a spotlight", await page.evaluate(() => !document.querySelector(".driver-active-element")));
+  check("phone: popover is centred without a spotlight", await page.evaluate(() => !!document.querySelector("#driver-dummy-element")));
   const box = await popover(page).boundingBox();
   check("phone: popover fits the screen", !!box && box.x >= 0 && box.x + box.width <= 390, JSON.stringify(box));
   await ctx.close();
