@@ -40,7 +40,7 @@ export function ProposalCard({ p }: { p: ProposalView }) {
           <p className="font-medium">{title}</p>
           {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1" data-tour="mandate-verdict">
           <Badge variant={verdictVariant(p.mandateVerdict)}>mandate: {p.mandateVerdict.replace("_", " ")}</Badge>
           <Badge variant="outline">{STATUS_LABELS[p.status] ?? p.status}</Badge>
         </div>

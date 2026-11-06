@@ -49,10 +49,12 @@ export default async function ApprovalsPage() {
         </section>
       )}
       <section className="space-y-3">
+        <div data-tour="approvals" className="space-y-1">
         <h1 className="text-2xl font-semibold">Approval queue</h1>
         <p className="text-sm text-muted-foreground">
           The agent proposes; your mandate decides what may run on its own. Everything else waits here.
         </p>
+        </div>
         {pending.length === 0 && <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">Nothing waiting for you.</p>}
         {pending.map((a) => (
           <ProposalCard key={a.id} p={view(a)} />

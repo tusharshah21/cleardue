@@ -62,7 +62,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
       </div>
 
       {invoice.status !== "DRAFT" && (
-      <Card>
+      <Card data-tour="diagnosis">
         <CardHeader>
           <CardDescription>Why hasn&apos;t {invoice.client.name} paid?</CardDescription>
           <CardTitle className="flex flex-wrap items-center gap-2">
@@ -108,7 +108,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           ))}
           {open && kase?.state !== "dispute" ? (
             <div className="space-y-3 border-t pt-4">
-              <DiagnosePanel invoiceId={invoice.id} analyzeLabel={daysOverdue(invoice) > 0 ? (kase ? "Re-run diagnosis" : "Diagnose now") : undefined} />
+              <div data-tour="diagnose-button"><DiagnosePanel invoiceId={invoice.id} analyzeLabel={daysOverdue(invoice) > 0 ? (kase ? "Re-run diagnosis" : "Diagnose now") : undefined} /></div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

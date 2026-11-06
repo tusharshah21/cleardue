@@ -5,9 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Compass, FilePlus2, LayoutDashboard, ListChecks, LogOut, Send, Sparkles, Users } from "lucide-react";
+import { CircleHelp, Compass, FilePlus2, LayoutDashboard, ListChecks, LogOut, Send, Sparkles, Users } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "@/components/ui/sidebar";
+import { startTour } from "@/components/tour/tour-runner";
 
 interface Item {
   href: string;
@@ -38,12 +39,31 @@ function Brand({ businessName }: { businessName: string }) {
           </motion.span>
         )}
       </Link>
-      {open && businessName && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-1 truncate text-xs text-muted-foreground">
-          {businessName}
-        </motion.p>
-      )}
+      {/* Always reserve this line: if it only appeared when the rail opens, every item would jump down as the pointer arrives. */}
+      {businessName && <p className={`mt-1 h-4 truncate text-xs text-muted-foreground ${open ? "" : "invisible"}`}>{businessName}</p>}
     </div>
+  );
+}
+
+function TourItem({ close }: { close: () => void }) {
+  const { open } = useSidebar();
+  return (
+    <button
+      type="button"
+      aria-label="Take the tour"
+      onClick={() => {
+        close();
+        startTour();
+      }}
+      className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-sidebar-accent"
+    >
+      <CircleHelp className={iconClass} />
+      {open && (
+        <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="whitespace-pre">
+          Tour
+        </motion.span>
+      )}
+    </button>
   );
 }
 
@@ -97,6 +117,7 @@ export function AppSidebar({ items, businessName }: { items: Item[]; businessNam
                     />
                   );
                 })}
+                <TourItem close={() => setOpen(false)} />
               </nav>
             </div>
             <SignOut />
