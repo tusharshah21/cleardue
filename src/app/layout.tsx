@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { appUrl } from "@/lib/app-url";
+import { TourRunner } from "@/components/tour/tour-runner";
 import { isMockMode } from "@/paypal/client";
 import "./globals.css";
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         )}
         {children}
+        <TourRunner />
       </body>
     </html>
   );

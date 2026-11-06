@@ -11,6 +11,7 @@ import { nextScheduledReset } from "@/lib/demo-seed";
 import { checkPayPalAuth } from "@/paypal/client";
 import { LocalTime } from "./local-time";
 import { ResetDemo } from "./reset-demo";
+import { TakeTourButton } from "@/components/tour/tour-runner";
 
 export const metadata: Metadata = { title: "Start here" };
 
@@ -80,8 +81,9 @@ export default async function WelcomePage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Start here</p>
-        <h1 className="text-2xl font-semibold text-balance">91% of surveyed New York freelancers have been paid late at least once. ClearDue finds out why each client hasn&apos;t paid and acts on it through PayPal, inside limits the freelancer sets.</h1>
+        <h1 data-tour="start-headline" className="text-2xl font-semibold text-balance">91% of surveyed New York freelancers have been paid late at least once. ClearDue finds out why each client hasn&apos;t paid and acts on it through PayPal, inside limits the freelancer sets.</h1>
         <p className="text-muted-foreground">You&apos;re signed in as {freelancer.name}, a designer in India with three overseas clients. Each story below takes a minute, and the analyst is there to ask.</p>
+        <TakeTourButton />
       </div>
 
       {!paypal.ok && paypal.problem !== "unreachable" && (
@@ -91,7 +93,7 @@ export default async function WelcomePage() {
       )}
 
       {stories.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div data-tour="story-cards" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[...stories, { ...ANALYST, target: "app" as const, played: false, extraHref: undefined, extra: undefined }].map((s, n) => (
             <Card key={s.client} className="flex flex-col">
               <CardHeader>
@@ -105,7 +107,7 @@ export default async function WelcomePage() {
                 <p>{s.body}</p>
               </CardContent>
               <CardFooter className="flex-col gap-2">
-                <Link href={s.href} className={buttonVariants({ variant: n === 0 ? "default" : "outline", className: "w-full" })} {...(s.target === "pay" && { target: "_blank", rel: "noopener" })}>
+                <Link href={s.href} data-tour={s.client === "Acme Labs" ? "open-acme" : s.client === "Koala Digital" ? "open-koala" : undefined} className={buttonVariants({ variant: n === 0 ? "default" : "outline", className: "w-full" })} {...(s.target === "pay" && { target: "_blank", rel: "noopener" })}>
                   {s.cta}
                 </Link>
                 {s.extraHref && (
@@ -128,7 +130,9 @@ export default async function WelcomePage() {
             Next automatic reset: <LocalTime iso={nextScheduledReset(now).toISOString()} />. Last automatic sync: {ago(lastScheduledSyncAt, now)}.
           </p>
         </div>
-        <ResetDemo />
+        <div data-tour="reset-demo" className="flex flex-wrap items-center gap-3">
+          <ResetDemo />
+        </div>
       </div>
 
       <form action={dismissWelcomeAction} className="flex flex-wrap items-center gap-3">

@@ -14,7 +14,7 @@ export default async function AnalystPage() {
   const freelancer = await requireFreelancer();
   const [receivables, decisions, plans] = await Promise.all([receivablesFor(freelancer.id), decisionsFor(freelancer.id), plansFor(freelancer.id)]);
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-tour="analyst">
       <div>
         <h1 className="text-2xl font-semibold">Collections analyst</h1>
         <p className="text-sm text-muted-foreground">Ask about receivables, mandate decisions and payment plans. Anything the analyst proposes waits on Approvals.</p>

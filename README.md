@@ -250,13 +250,23 @@ For judges (also pasted into Devpost):
 1. Open the hosted demo, <https://cleardue-6laj.onrender.com>, and sign in with `demo@cleardue.app` / `judge-cleardue-2026`. The hosted demo runs on a PayPal sandbox app whose credentials aren't in the repo: every invoice and payment is fake money, and no real money moves.
 
    To pay a client invoice you have two options on its pay page: **Pay with PayPal** opens PayPal's sandbox checkout, where you can sign in with your own sandbox personal account; or **Mark as paid (sandbox test)** records the payment through the Invoicing API, with no account needed. Either way PayPal's signed webhook marks the invoice paid and closes the case.
-2. You land on **Start here**, with three stories, each about a minute:
+2. You land on **Start here**. A 30-second guided tour is offered on first visit; replay it from Start here or the ? in the menu. There are three stories, each about a minute:
    - **Acme Labs, autopilot acts with no click.** Open Acme's invoice and click **Diagnose now**. The agent reads Dana's "waiting on finance sign-off" reply, then sends a PayPal reminder to Acme's AP contact and pauses reminders. Both show on the timeline as done by autopilot, within the mandate; Approvals stays empty.
    - **Brightside Studio, approval path and a payment plan.** Open Brightside's invoice and click **Diagnose now** (Sam: "cash is tight this month"). Open the pay page link and accept a two-part plan: autopilot is off for this client, so the page says Aarav will confirm. Approve it under **Approvals**; the pay page updates to two smaller PayPal invoices.
    - **Koala Digital, the client's pay page.** Ask the chat a scope question (for example "Is Safari testing included?") and get an answer quoting the scope. Ask to split the payment to see plan options. Pay it with either option above; the invoice shows **Paid (recorded)** or **Paid**, and the case closes.
 3. If a story is already finished (another judge got there first), click **Reset demo** on Start here (at most once every 5 minutes). The demo also resets itself daily at 03:00 UTC.
 
 Acme's reminder is client contact, so the mandate holds it during the client's quiet hours (20:00 to 08:00 New York time). At night there, Start here says so: the diagnosis still runs and the reminder waits in Approvals. For autopilot acting at night, use Koala's plan, or try Acme during New York daytime.
+
+## Guided tour
+
+First-time visitors get a small, skippable prompt on Start here ("New here? Take a 30-second tour."). The tour is nine steps with a spotlight and a popover: the headline, the story cards, Reset demo, Acme's diagnosis and mandate verdict, Approvals, the client's pay page and the analyst. It only points and explains: the page behind it is blocked, and it never clicks, diagnoses, approves or resets anything. It moves between pages only when you press Next, with Back, Skip, Esc and the arrow keys to control it.
+
+- **Once per browser, not per account:** the demo account is shared, so the state is in the browser's localStorage. If storage is blocked, the tour is never offered on its own.
+- **Replay:** the **Take the tour** button on Start here, or the **?** (Tour) item in the menu on every page.
+- **Suppress:** add `?tour=off` to any URL (it sets the stored state and removes itself from the address). The demo-video scripts do this.
+- **Phones:** under 768 px wide there is no automatic prompt, and the tour shows centred popovers without a spotlight; the button says it works best on a larger screen.
+- Built with [Driver.js](https://driverjs.com) (MIT). Tests: `npm test` covers the state logic (`src/lib/tour.test.ts`); `BASE_URL=<app url> npm run test:e2e:tour` walks every step in fresh browser contexts.
 
 ## Environment variables
 
@@ -299,6 +309,12 @@ See [.env.example](.env.example). Never commit `.env`.
 
 ```bash
 npm test
+```
+
+The guided tour's browser test needs a running, seeded app and Chrome (`CHROME=<path>` for a non-default build):
+
+```bash
+BASE_URL=http://localhost:3000 npm run test:e2e:tour
 ```
 
 ```bash

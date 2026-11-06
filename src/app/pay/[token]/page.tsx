@@ -52,7 +52,7 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
         </h1>
       </div>
 
-      <Card>
+      <Card data-tour="pay-card">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
