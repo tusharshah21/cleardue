@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { after } from "next/server";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncStale } from "@/lib/invoicing";
 import { formatMoney } from "@/lib/money";
+import ProgressMetricCard from "@/components/ui/progress-metric-card";
+import { dueAheadSeries, netChange, openCountSeries, overdueCountSeries } from "@/lib/dashboard-series";
 import { describeProposal, REASON_LABELS } from "@/lib/proposals";
 import { daysOverdue, isOpen, outstanding, sumByCurrency } from "@/lib/receivables";
 import { retryPendingPlans } from "@/plans/accept";
@@ -76,11 +78,13 @@ export default async function DashboardPage() {
     };
   });
 
-  const stats = [
-    { label: "Total owed", value: sumByCurrency(open), hint: `${open.length} open invoice${open.length === 1 ? "" : "s"}` },
-    { label: "Overdue", value: sumByCurrency(overdue), hint: `${overdue.length} invoice${overdue.length === 1 ? "" : "s"} past due` },
-    { label: "Expected this week", value: sumByCurrency(dueThisWeek), hint: `${dueThisWeek.length} due in 7 days` },
-  ];
+  // Three metric cards: the headline is a count (mixed currencies are never added), the money sits in the footer.
+  const openSeries = openCountSeries(invoices, now);
+  const overdueSeries = overdueCountSeries(invoices, now);
+  const aheadSeries = dueAheadSeries(invoices, now);
+  const openChange = netChange(openSeries);
+  const overdueChange = netChange(overdueSeries);
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
   return (
     <div className="space-y-6">
@@ -91,16 +95,54 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardHeader>
-              <CardDescription>{s.label}</CardDescription>
-              <CardTitle className="text-xl">{s.value}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">{s.hint}</CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ProgressMetricCard
+          size="sm"
+          title="Total owed"
+          total={open.length}
+          unit="open invoices"
+          data={openSeries}
+          accent="sky"
+          trend={openChange.trend}
+          percent={openChange.text}
+          period="Past 30 days"
+          periodOptions={[{ label: "Past 7 days", points: 7 }, { label: "Past 14 days", points: 14 }, { label: "Past 30 days" }]}
+          delta={sumByCurrency(open)}
+          deltaLabel={open.length ? "owed" : ""}
+          showStats={false}
+        />
+        <ProgressMetricCard
+          size="sm"
+          title="Overdue"
+          total={overdue.length}
+          unit="overdue"
+          data={overdueSeries}
+          accent="rose"
+          trend={overdueChange.trend}
+          percent={overdueChange.text}
+          period="Past 30 days"
+          periodOptions={[{ label: "Past 7 days", points: 7 }, { label: "Past 14 days", points: 14 }, { label: "Past 30 days" }]}
+          delta={sumByCurrency(overdue)}
+          deltaLabel={plural(overdue.length, "invoice") + " past due"}
+          showStats={false}
+        />
+        <ProgressMetricCard
+          size="sm"
+          title="Due this week"
+          total={dueThisWeek.length}
+          unit="due"
+          data={aheadSeries}
+          accent="emerald"
+          trend="flat"
+          percent="forecast"
+          period="Next 7 days"
+          periodOptions={[{ label: "Next 7 days" }]}
+          defaultView="bars"
+          defaultIndex={0}
+          delta={sumByCurrency(dueThisWeek)}
+          deltaLabel={dueThisWeek.length ? "expected" : ""}
+          showStats={false}
+        />
       </div>
 
       <Card>
