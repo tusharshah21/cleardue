@@ -103,6 +103,15 @@ All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other
 | `POST /v1/notifications/webhooks` | Subscribe `INVOICING.INVOICE.PAID`, `UPDATED`, `CANCELLED`, `REFUNDED` |
 | `POST /v1/notifications/verify-webhook-signature` | Verify every incoming event before it is processed |
 | `POST /v1/notifications/simulate-event` | Dev script to test simulator events against verification |
+| `GET /v1/reporting/transactions` | Transaction Search: *Payments received (live from PayPal)* on the dashboard and in `/analyst` |
+
+### Payments received, live from PayPal
+
+ClearDue's own records say which invoices are paid. The *Payments received (live from PayPal)* card on the dashboard shows the other side: the money PayPal itself recorded in the last 90 days, read from Transaction Search ([transactions.ts](src/paypal/transactions.ts), [route](src/app/api/paypal/payments/route.ts)). Each payment is matched against ClearDue's invoice numbers ("invoice 0233 in ClearDue", or "not in ClearDue"), and the card says when PayPal last refreshed the data, because Transaction Search can run up to three hours behind. The same rows are a `paypalPayments` source in `/analyst`, joined to invoices by invoice number (so the client filter applies), with a *Received in PayPal* KPI.
+
+- PayPal allows 31 days per search, so the server asks for three 30-day windows, keeps money in (refunds, fees and transfers out are left out) and caches the result for 5 minutes, using the same token cache as every other call.
+- If the call fails, the card and `/analyst` show a plain sentence instead (a `403` means the app lacks the Transaction Search permission, which is different from bad credentials) and the rest of the page is unaffected. Tested for success, no payments and errors ([tests](src/paypal/transactions.test.ts)).
+- Transaction Search has to be enabled for the REST app in the PayPal developer dashboard, and the permission only appears in a newly issued token.
 
 ### PayPal Agent Toolkit, gated
 

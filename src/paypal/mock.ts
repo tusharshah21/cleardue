@@ -23,7 +23,7 @@ export interface MockInvoice {
   configuration?: { partial_payment?: { allow_partial_payment?: boolean; minimum_amount_due?: Money } };
   amount: Money;
   due_amount: Money;
-  payments?: { paid_amount: Money; transactions: { payment_id: string; amount: Money; method: string }[] };
+  payments?: { paid_amount: Money; transactions: { payment_id: string; amount: Money; method: string; at?: string }[] };
   reminders: { at: string; additional_recipients: string[]; note?: string }[];
 }
 interface Store {
@@ -88,6 +88,7 @@ const ROUTE = /^\/v2\/invoicing\/invoices(?:\/([^/?]+))?(?:\/(send|remind|cancel
 
 /** Handles one Invoicing API request the way the sandbox would. */
 export function mockRequest(method: string, path: string, body: unknown): MockResponse {
+  if (path.startsWith("/v1/reporting/transactions")) return transactions(path);
   const m = ROUTE.exec(path);
   if (!m) return error(404, "NOT_FOUND", `The mock doesn't implement ${method} ${path}`);
   const [, id, action] = m;
@@ -154,7 +155,7 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
       const due = total(inv) - paid(inv);
       if (c <= 0 || c > due) return error(422, "UNPROCESSABLE_ENTITY", "Payment amount must be positive and no more than the amount due.", "INVALID_PAYMENT_AMOUNT");
       const payment_id = `MOCKPAY${randomBytes(6).toString("hex").toUpperCase()}`;
-      const transactions = [...(inv.payments?.transactions ?? []), { payment_id, amount, method: String(b.method ?? "PAYPAL") }];
+      const transactions = [...(inv.payments?.transactions ?? []), { payment_id, amount, method: String(b.method ?? "PAYPAL"), at: new Date().toISOString() }];
       inv.payments = { paid_amount: money(inv.detail.currency_code, paid(inv) + c), transactions };
       inv.status = paid(inv) >= total(inv) ? "PAID" : "PARTIALLY_PAID";
       refresh(inv);
@@ -162,6 +163,23 @@ export function mockRequest(method: string, path: string, body: unknown): MockRe
     }
   }
   return error(404, "NOT_FOUND", `Unknown action ${action}`);
+}
+
+/** Transaction Search over the payments recorded on mock invoices, in the window the query asks for. */
+function transactions(path: string): MockResponse {
+  const q = new URLSearchParams(path.split("?")[1] ?? "");
+  const from = q.get("start_date") ?? "", to = q.get("end_date") ?? "";
+  if (!from || !to) return error(400, "INVALID_REQUEST", "start_date and end_date are required.", "MISSING_REQUIRED_PARAMETER");
+  const transaction_details = Object.values(load().invoices).flatMap((inv) =>
+    (inv.payments?.transactions ?? [])
+      .map((t) => ({ t, at: t.at ?? new Date().toISOString() }))
+      .filter(({ at }) => at >= from && at < to)
+      .map(({ t, at }) => ({
+        transaction_info: { transaction_id: t.payment_id, transaction_event_code: "T0007", transaction_initiation_date: at, transaction_amount: t.amount, transaction_status: "S", invoice_id: inv.detail.invoice_number },
+        payer_info: { payer_name: { alternate_full_name: "Mock payer" } },
+      })),
+  );
+  return { status: 200, body: { transaction_details, last_refreshed_datetime: new Date().toISOString(), page: 1, total_items: transaction_details.length, total_pages: 1 } };
 }
 
 export function mockInvoice(id: string): MockInvoice | undefined {
