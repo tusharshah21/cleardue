@@ -17,7 +17,7 @@ import type { ScopeCheck } from "@/ai/schemas";
 import { scopeCheck } from "@/ai/tasks";
 import { randomUUID } from "node:crypto";
 import { addLineToDraft, createAndSendInvoice, handleWebhookEvent, sendDraft, syncInvoice } from "@/lib/invoicing";
-import { isMockMode } from "@/paypal/client";
+import { isMockMode, PayPalError, plainPayPalMessage } from "@/paypal/client";
 import { recordPayment } from "@/paypal/invoices";
 import { mockInvoice } from "@/paypal/mock";
 import { toMinor } from "@/lib/money";
@@ -34,7 +34,7 @@ function errorText(e: unknown): string {
     console.error(e);
     return "Something went wrong saving this. Check the server logs.";
   }
-  const message = e instanceof Error ? e.message : String(e);
+  const message = e instanceof PayPalError ? plainPayPalMessage(e) : e instanceof Error ? e.message : String(e);
   return message.length > 300 ? `${message.slice(0, 300)}…` : message;
 }
 

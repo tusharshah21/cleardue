@@ -4,6 +4,7 @@
 // drafts first, re-check the original, cancel it silently, then send. Pure apart from the injected I/O.
 import type { Instalment, Mandate } from "@/agent/mandate";
 import { formatMoney, splitEvenly } from "@/lib/money";
+import { plainPayPalMessage } from "@/paypal/client";
 import type { CreateInvoiceInput, LineItem, PayPalInvoice } from "@/paypal/invoices";
 
 export type PlanStrategy = "split_invoices" | "partial_payment";
@@ -120,7 +121,7 @@ export interface PlanStore {
 export class PlanAborted extends Error {}
 
 const OPEN = ["SENT", "UNPAID", "SCHEDULED"];
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = (e: unknown) => plainPayPalMessage(e);
 
 async function discard(ids: string[], api: PlanPayPal) {
   await Promise.all(ids.map((id) => api.deleteDraftInvoice(id).catch(() => undefined)));

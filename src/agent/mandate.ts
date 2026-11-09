@@ -139,6 +139,9 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
     else deny.push("case is in dispute; automation is stopped");
   }
 
+  // Paid, cancelled or refunded (in ClearDue or straight in PayPal): nothing to collect, so the agent does nothing.
+  if (!OPEN.includes(invoice.status) && !INTERNAL.includes(action.type)) deny.push(`invoice is ${invoice.status.replaceAll("_", " ").toLowerCase()}; the agent only acts on open invoices`);
+
   // The agent may only touch this case's invoice.
   if ("invoiceId" in action) {
     if (!invoice.paypalInvoiceId) deny.push("invoice is not on PayPal yet");
@@ -161,7 +164,6 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
       const body = action.type === "send_message" ? action.body : action.note;
       if (!body.trim()) deny.push("message is empty");
       if (action.type === "send_reminder") {
-        if (!OPEN.includes(invoice.status)) deny.push(`invoice is ${invoice.status}; nothing to remind about`);
         const known = new Set(ctx.knownRecipients.map((r) => r.toLowerCase()));
         const strangers = action.additionalRecipients.filter((r) => !known.has(r.toLowerCase()));
         if (strangers.length) deny.push(`unknown recipients: ${strangers.join(", ")}`);
@@ -172,7 +174,6 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
       break;
     }
     case "offer_plan":
-      if (!OPEN.includes(invoice.status)) deny.push(`invoice is ${invoice.status}; no plan possible`);
       deny.push(...planProblems(action.instalments, ctx));
       if (action.message && mentionsPaymentRail(action.message)) approval.push(RAIL_REASON);
       break;

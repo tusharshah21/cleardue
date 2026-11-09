@@ -44,6 +44,13 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
   const payLink = `${appUrl()}/pay/${invoice.payToken}`;
   // What PayPal has delivered for this invoice: verified events are what close cases; rejected ones say why.
   const webhooks = invoice.paypalInvoiceId ? await db.webhookEvent.findMany({ where: { resourceId: invoice.paypalInvoiceId }, orderBy: { receivedAt: "desc" }, take: 8 }) : [];
+  const plan = await db.planGroup.findUnique({ where: { originalInvoiceId: invoice.id }, select: { state: true, error: true } });
+  const closedText: Record<string, string> = {
+    CANCELLED: "Cancelled in PayPal. The agent won't remind, reschedule or split this invoice.",
+    REFUNDED: "Refunded in PayPal. The agent is paused on this invoice.",
+    PARTIALLY_REFUNDED: "Partly refunded in PayPal. The agent is paused on this invoice.",
+    MARKED_AS_REFUNDED: "Refunded in PayPal. The agent is paused on this invoice.",
+  };
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -60,6 +67,12 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
           {isMockMode() && open && invoice.paypalInvoiceId && <SimulatePaymentButton paypalInvoiceId={invoice.paypalInvoiceId} />}
         </div>
       </div>
+
+      {plan?.state === "interrupted" && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          <strong>Payment plan interrupted.</strong> {plan.error}. The other parts stay as they are; check with the client before setting up a new plan.
+        </div>
+      )}
 
       {invoice.status !== "DRAFT" && (
       <Card data-tour="diagnosis">
@@ -112,7 +125,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {open ? "Automation is stopped while this is in dispute. Reply to the client yourself." : "Nothing left to collect on this invoice."}
+              {open ? "Automation is stopped while this is in dispute. Reply to the client yourself." : (closedText[invoice.status] ?? "Nothing left to collect on this invoice.")}
             </p>
           )}
         </CardContent>

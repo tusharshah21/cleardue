@@ -46,6 +46,7 @@ export function createWebhook(url: string) {
 export function simulateEvent(webhookId: string, eventType: string) {
   return paypalRequest<{ id: string }>("/v1/notifications/simulate-event", {
     method: "POST",
-    body: { webhook_id: webhookId, event_type: eventType, resource_version: "2.0" },
+    // No resource_version: the sandbox answers "Not a valid Resource Type" to "2.0" for invoicing events.
+    body: { webhook_id: webhookId, event_type: eventType },
   });
 }

@@ -12,6 +12,7 @@ import { classifyReply, type ThreadMessage } from "@/ai/tasks";
 import type { ClassifyReply } from "@/ai/schemas";
 import { db } from "@/lib/db";
 import { syncInvoice } from "@/lib/invoicing";
+import { plainPayPalMessage } from "@/paypal/client";
 import { actionText, verdictText } from "@/lib/proposals";
 import { formatMoney, fromMinor, splitEvenly } from "@/lib/money";
 import { daysOverdue, isOpen } from "@/lib/receivables";
@@ -157,7 +158,7 @@ function hooksFor(caseId: string, invoice: FullInvoice, confidence: number, coun
         await timeline(invoice.id, caseId, "action_executed", `Autopilot ${actionText(p.toolName, p.input, invoice.client.approverEmail).done}`, result);
         return result;
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = plainPayPalMessage(e);
         await db.proposedAction.update({ where: { id }, data: { status: "failed", result: json({ error: message }), decidedAt: new Date() } });
         await timeline(invoice.id, caseId, "action_failed", `Couldn't finish ${actionText(p.toolName, p.input, invoice.client.approverEmail).doing}: ${message}`);
         throw e;
@@ -298,7 +299,7 @@ export async function approveProposal(proposalId: string, freelancerId: string, 
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "executed", params: json(input), draft: draftOf(p.type, input), result: json(result), decidedAt: new Date() } });
     await timeline(invoice.id, p.caseId, "action_approved", `You approved ${actionText(p.type, input, invoice.client.approverEmail).doing}${edited ? " (edited)" : ""}`, result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = plainPayPalMessage(e);
     await db.proposedAction.update({ where: { id: p.id }, data: { status: "failed", result: json({ error: message }), decidedAt: new Date() } });
     await timeline(invoice.id, p.caseId, "action_failed", `Couldn't finish ${actionText(p.type, input, invoice.client.approverEmail).doing}: ${message}`);
     throw e;
