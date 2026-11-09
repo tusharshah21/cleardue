@@ -69,7 +69,9 @@ flowchart LR
 
 ## Collections analyst (AG Studio)
 
-![The /analyst page: the AI Assistant on the left, and three custom widgets (who still owes what, mandate decisions, plan tracker) on the report](docs/screenshots/38-analyst-dashboard.jpg)
+![The hosted /analyst page opening on its ready-made report: collection rate, median days to paid and recovered this month as KPIs, the client and date filters, overdue by reason, and the three custom widgets](docs/screenshots/45-hosted-analyst-report.jpg)
+
+![The same report with Northwind Media clicked: every widget follows the client filter and the collection rate reads 100%](docs/screenshots/46-hosted-analyst-northwind.jpg)
 
 `/analyst` is an [AG Studio](https://www.ag-grid.com/studio/) dashboard for the freelancer, built on the Studio Agent Framework:
 
@@ -249,6 +251,8 @@ Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`)
 ## When things go wrong
 
 PayPal is the source of truth, and things change there without ClearDue being asked. This is what happens in each case, and how to check it. The tests for all of it use PayPal's own sample webhook payloads ([src/paypal/fixtures](src/paypal/fixtures), [src/lib/unhappy-paths.test.ts](src/lib/unhappy-paths.test.ts)).
+
+![A test invoice on the hosted demo after it was cancelled directly through PayPal's API: the verified webhook arrived 18 seconds later, the status moved to Cancelled and the timeline says the agent stopped](docs/screenshots/47-hosted-cancelled-in-paypal.jpg)
 
 | What happened in PayPal | What ClearDue does |
 | --- | --- |
