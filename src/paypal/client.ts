@@ -10,6 +10,8 @@ export class PayPalError extends Error {
     readonly status: number,
     readonly debugId?: string,
     readonly details?: unknown,
+    /** PayPal's error name, e.g. UNPROCESSABLE_ENTITY or INVALID_RESOURCE_ID. */
+    readonly paypalName?: string,
   ) {
     super(message);
     this.name = "PayPalError";
@@ -76,7 +78,41 @@ async function toError(res: Response): Promise<PayPalError> {
     .map((d) => [d.field, d.issue, d.description].filter(Boolean).join(": "))
     .join("; ");
   const head = body.message || body.error_description || body.name || res.statusText || "request failed";
-  return new PayPalError(`PayPal ${res.status}: ${head}${details ? ` (${details})` : ""}`, res.status, body.debug_id, body.details);
+  return new PayPalError(`PayPal ${res.status}: ${head}${details ? ` (${details})` : ""}`, res.status, body.debug_id, body.details, body.name);
+}
+
+/** One log line per PayPal failure: status, error name, issues and debug_id (what PayPal support asks for). Never the
+ * token, never a request or response body (they carry names and email addresses). */
+export function logPayPalError(where: string, err: PayPalError) {
+  const issues = Array.isArray(err.details) ? (err.details as { issue?: string }[]).map((d) => d.issue).filter(Boolean).join(",") : "";
+  console.error(`[paypal] ${where} failed: status=${err.status} name=${err.paypalName ?? "-"}${issues ? ` issues=${issues}` : ""} debug_id=${err.debugId ?? "-"}`);
+}
+
+const ISSUE_TEXT: Record<string, string> = {
+  INVALID_INVOICE_STATUS: "PayPal says this invoice can't be changed in its current state. It may have been paid, cancelled or refunded in PayPal; press Sync to see the latest.",
+  CANNOT_UPDATE_INVOICE: "PayPal says this invoice can't be changed in its current state. It may have been paid, cancelled or refunded in PayPal; press Sync to see the latest.",
+  // Recorded from the sandbox (debug_id f34268289bfd1): reminding an invoice that is a draft, paid or cancelled.
+  CANNOT_REMIND_INVOICE: "PayPal only sends reminders for invoices that have been sent and are still unpaid. Press Sync to see the invoice's current state.",
+  CANNOT_CANCEL_INVOICE: "PayPal can't cancel this invoice in its current state. It may already be paid or cancelled; press Sync to see the latest.",
+  PARTIAL_PAYMENT_NOT_ALLOWED: "PayPal doesn't allow part payments for accounts in your country, so this plan has to use separate invoices.",
+  INVALID_RESOURCE_ID: "PayPal can't find this invoice any more. It may have been deleted in PayPal.",
+  DUPLICATE_INVOICE_NUMBER: "PayPal already has an invoice with this number.",
+};
+
+/** A sentence a freelancer can act on, for any error. The technical detail stays in the logs and the timeline data. */
+export function plainPayPalMessage(e: unknown): string {
+  if (!(e instanceof PayPalError)) return e instanceof Error ? e.message : String(e);
+  const issues = Array.isArray(e.details) ? (e.details as { issue?: string }[]).map((d) => d.issue ?? "") : [];
+  const known = issues.map((i) => ISSUE_TEXT[i]).find(Boolean);
+  const ref = e.debugId ? ` (PayPal reference ${e.debugId})` : "";
+  if (known) return known + ref;
+  if (e.status === 0) return e.message; // our own configuration message
+  if (e.status === 401 || e.status === 403) return `PayPal refused ClearDue's credentials. Check the app's client ID and secret in the PayPal developer dashboard.${ref}`;
+  if (e.status === 404) return `PayPal can't find this invoice. It may have been deleted in PayPal.${ref}`;
+  if (e.status === 422 || e.status === 400) return `PayPal rejected the change: ${e.message.replace(/^PayPal \d+: /, "")}${ref}`;
+  if (e.status === 429) return `PayPal is rate-limiting requests. Try again in a minute.${ref}`;
+  if (e.status >= 500) return `PayPal is having trouble right now (${e.status}). Nothing was changed; try again shortly.${ref}`;
+  return e.message + ref;
 }
 
 export async function getAccessToken(): Promise<string> {
@@ -94,7 +130,11 @@ async function fetchAccessToken(): Promise<string> {
     },
     body: "grant_type=client_credentials",
   });
-  if (!res.ok) throw await toError(res);
+  if (!res.ok) {
+    const err = await toError(res);
+    logPayPalError("POST /v1/oauth2/token", err);
+    throw err;
+  }
   const json = (await res.json()) as { access_token: string; expires_in: number };
   // Refresh a minute early so a token never expires mid-request.
   cachedToken = { token: json.access_token, expiresAt: Date.now() + (json.expires_in - 60) * 1000 };
@@ -111,7 +151,11 @@ export async function paypalRequest<T>(path: string, opts: RequestOptions = {}, 
   if (isMockMode()) {
     const { mockRequest } = await import("./mock");
     const res = mockRequest(opts.method ?? "GET", path, opts.body);
-    if (res.status >= 400) throw await toError(new Response(JSON.stringify(res.body), { status: res.status }));
+    if (res.status >= 400) {
+      const err = await toError(new Response(JSON.stringify(res.body), { status: res.status }));
+      logPayPalError(`${opts.method ?? "GET"} ${path.split("?")[0]} (mock)`, err);
+      throw err;
+    }
     return res.body as T;
   }
   const { base } = config();
@@ -129,7 +173,11 @@ export async function paypalRequest<T>(path: string, opts: RequestOptions = {}, 
     resetTokenCache();
     return paypalRequest<T>(path, opts, true);
   }
-  if (!res.ok) throw await toError(res);
+  if (!res.ok) {
+    const err = await toError(res);
+    logPayPalError(`${opts.method ?? "GET"} ${path.split("?")[0]}`, err);
+    throw err;
+  }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }

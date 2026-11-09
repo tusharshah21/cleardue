@@ -5,6 +5,7 @@ import type { Client, Freelancer, Invoice } from "@/generated/prisma/client";
 import { toMinor } from "@/lib/money";
 import { createDraftInvoice, getInvoice, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
 import { INVOICE_EVENTS, invoiceIdOf, type WebhookEventBody } from "@/paypal/webhooks";
+import { PayPalError, plainPayPalMessage } from "@/paypal/client";
 import { supersedePending } from "@/agent/supersede";
 import { db } from "./db";
 
@@ -46,7 +47,9 @@ const draftInput = (freelancer: Freelancer, client: Client, invoice: Pick<Invoic
 });
 
 const paypalError = (invoiceId: string, e: unknown) =>
-  db.timelineEvent.create({ data: { invoiceId, kind: "paypal_error", summary: e instanceof Error ? e.message : String(e) } });
+  db.timelineEvent.create({
+    data: { invoiceId, kind: "paypal_error", summary: plainPayPalMessage(e), ...(e instanceof PayPalError && { data: { status: e.status, name: e.paypalName ?? null, debugId: e.debugId ?? null } }) },
+  });
 
 /** Creates the PayPal draft if needed, sends it and stores the result. A failure after the PayPal draft exists keeps
  * the local row (with a paypal_error timeline entry) so it can be retried. */
@@ -123,28 +126,67 @@ export async function addLineToDraft(freelancer: Freelancer, client: Client, pro
   }
 }
 
-const CLOSED = ["PAID", "MARKED_AS_PAID", "CANCELLED", "REFUNDED", "MARKED_AS_REFUNDED"];
+const PAID = ["PAID", "MARKED_AS_PAID"];
+const REFUNDED = ["REFUNDED", "PARTIALLY_REFUNDED", "MARKED_AS_REFUNDED"];
+export const CLOSED = [...PAID, "CANCELLED", ...REFUNDED];
+
+/** What the freelancer reads when an invoice closes. `source` says who noticed: our own plan flow cancels the original
+ * itself, so that one gets no "in PayPal" note; webhooks and polling mean it happened outside ClearDue. */
+export function closureNote(prev: string, next: string, source: string): { kind: string; summary: string } | null {
+  if (prev === next || !CLOSED.includes(next) || source === "plan") return null;
+  const outside = /webhook|polling/.test(source);
+  if (REFUNDED.includes(next)) {
+    return { kind: "paypal_refunded", summary: `${next === "PARTIALLY_REFUNDED" ? "Partly refunded" : "Refunded"} in PayPal, agent paused. No more reminders, plans or messages on this invoice.` };
+  }
+  if (next === "CANCELLED") return { kind: "paypal_cancelled", summary: "Cancelled in PayPal, agent stopped. It will not remind, reschedule or split this invoice." };
+  if (PAID.includes(prev)) return null;
+  return { kind: "paypal_paid", summary: outside ? "Paid in PayPal outside ClearDue, reminders stopped." : "Paid, reminders stopped." };
+}
 
 /** Pulls the latest status from PayPal (sync button, webhooks, polling). PayPal is the source of truth:
- * webhook payloads only tell us *which* invoice to re-read. A closed invoice resolves its case. */
+ * webhook payloads only tell us *which* invoice to re-read. A closed invoice resolves its case and supersedes anything
+ * the agent was still waiting to do. */
 export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<Invoice> {
   if (!invoice.paypalInvoiceId) return invoice;
   const fresh = await getInvoice(invoice.paypalInvoiceId);
   const updated = await db.invoice.update({ where: { id: invoice.id }, data: statusFields(fresh, invoice.currency) });
   if (updated.status === invoice.status) return updated;
-  if (CLOSED.includes(updated.status)) await db.task.updateMany({ where: { invoiceId: invoice.id, done: false }, data: { done: true } });
+  const closed = CLOSED.includes(updated.status);
+  if (closed) await db.task.updateMany({ where: { invoiceId: invoice.id, done: false }, data: { done: true } });
   const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
   await db.timelineEvent.create({
     data: { invoiceId: invoice.id, caseId: kase?.id, kind: "status_changed", summary: `PayPal status ${invoice.status} → ${updated.status} (${source})` },
   });
-  if (kase && CLOSED.includes(updated.status) && kase.state !== "resolved") {
-    await db.case.update({ where: { id: kase.id }, data: { state: "resolved", pausedUntil: null } });
+  const note = closureNote(invoice.status, updated.status, source);
+  if (note) await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase?.id, ...note } });
+  if (kase && closed) {
+    // A refund after payment finds the case already resolved; anything still pending is superseded either way.
     await supersedePending(kase.id, invoice.id, `the invoice is now ${updated.status.replaceAll("_", " ").toLowerCase()}`);
-    await db.timelineEvent.create({
-      data: { invoiceId: invoice.id, caseId: kase.id, kind: "case_resolved", summary: `Case closed: invoice is ${updated.status.replaceAll("_", " ").toLowerCase()}` },
-    });
+    if (kase.state !== "resolved") {
+      await db.case.update({ where: { id: kase.id }, data: { state: "resolved", pausedUntil: null } });
+      await db.timelineEvent.create({
+        data: { invoiceId: invoice.id, caseId: kase.id, kind: "case_resolved", summary: `Case closed: invoice is ${updated.status.replaceAll("_", " ").toLowerCase()}` },
+      });
+    }
   }
+  if (updated.planGroupId && (updated.status === "CANCELLED" || REFUNDED.includes(updated.status)) && source !== "plan") await planPartClosed(updated);
   return updated;
+}
+
+/** A plan part was cancelled or refunded in PayPal: the plan as agreed no longer holds, so the parent plan is marked
+ * interrupted and the freelancer is told on the original invoice. The other parts are left as they are. */
+async function planPartClosed(part: Invoice) {
+  const group = await db.planGroup.findUnique({ where: { id: part.planGroupId! }, include: { invoices: { orderBy: { dueDate: "asc" }, select: { id: true } } } });
+  if (!group) return;
+  const n = group.invoices.findIndex((i) => i.id === part.id) + 1;
+  const what = part.status === "CANCELLED" ? "cancelled" : "refunded";
+  const error = `Part ${n} of ${group.invoices.length}${part.invoiceNumber ? ` (${part.invoiceNumber})` : ""} was ${what} in PayPal`;
+  await db.planGroup.update({ where: { id: group.id }, data: { state: "interrupted", error } });
+  const kase = await db.case.findUnique({ where: { invoiceId: group.originalInvoiceId } });
+  if (kase) await supersedePending(kase.id, group.originalInvoiceId, error.toLowerCase());
+  await db.timelineEvent.create({
+    data: { invoiceId: group.originalInvoiceId, caseId: kase?.id, kind: "plan_interrupted", summary: `${error}. The payment plan is interrupted; the other parts stay as they are. Check with the client before re-planning.` },
+  });
 }
 
 /** Stores a webhook event and, if it may be processed, syncs the invoice it names. Shared by the webhook route and the
@@ -157,7 +199,8 @@ export async function handleWebhookEvent(event: WebhookEventBody, opts: { verifi
     update: { verified: opts.verified, note: opts.note },
   });
   if (!opts.process) return false;
-  if (INVOICE_EVENTS.includes(event.event_type)) {
+  if (!INVOICE_EVENTS.includes(event.event_type)) console.log(`[webhook] ignoring event type ${event.event_type} (${event.id}); stored, nothing to do`);
+  else {
     const paypalId = invoiceIdOf(event);
     const invoice = paypalId ? await db.invoice.findUnique({ where: { paypalInvoiceId: paypalId } }) : null;
     if (invoice) {
@@ -189,10 +232,32 @@ export async function syncStale(maxAgeMs = 2 * 60_000, limit = 50) {
       errors.push(`${inv.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+  // Refunds land on invoices that are already paid, which the query above skips. Re-read recently paid ones at a slower
+  // pace (PayPal allows refunds for 180 days).
+  const paidCutoff = new Date(Date.now() - 30 * 60_000);
+  const paid = await db.invoice.findMany({
+    where: { paypalInvoiceId: { not: null }, status: { in: [...PAID, "PARTIALLY_REFUNDED"] }, createdAt: { gt: new Date(Date.now() - 180 * 86_400_000) }, OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: paidCutoff } }] },
+    orderBy: { lastSyncedAt: { sort: "asc", nulls: "first" } },
+    take: 20,
+  });
+  for (const inv of paid) {
+    try {
+      await syncInvoice(inv, "polling");
+    } catch (e) {
+      errors.push(`${inv.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // Verified webhook deliveries whose sync failed (the route acknowledges first, so PayPal won't resend them).
+  const unprocessed = await db.webhookEvent.findMany({ where: { verified: true, processed: false, receivedAt: { gt: new Date(Date.now() - 3 * 86_400_000) } }, take: 20 });
+  let replayed = 0;
+  for (const e of unprocessed) {
+    const event = e.payload as unknown as WebhookEventBody;
+    if (await handleWebhookEvent(event, { verified: true, process: true, note: e.note, source: "polling retry of webhook" })) replayed++;
+  }
   const expired = await db.case.findMany({ where: { state: "paused", pausedUntil: { lte: new Date() } } });
   for (const c of expired) {
     await db.case.update({ where: { id: c.id }, data: { state: "open", pausedUntil: null } });
     await db.timelineEvent.create({ data: { invoiceId: c.invoiceId, caseId: c.id, kind: "pause_ended", summary: "Pause ended; the case is open again" } });
   }
-  return { synced: invoices.length - errors.length, errors, pausesEnded: expired.length };
+  return { synced: invoices.length + paid.length - errors.length, errors, webhooksRetried: replayed, pausesEnded: expired.length };
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkPayPalAuth, getAccessToken, PayPalError, paypalRequest, resetAuthCheck, resetTokenCache } from "./client";
+import { checkPayPalAuth, getAccessToken, PayPalError, paypalRequest, plainPayPalMessage, resetAuthCheck, resetTokenCache } from "./client";
 import { buildInvoiceBody, createDraftInvoice, sendInvoice, updateDraftInvoice } from "./invoices";
 import { invoiceIdOf, verifyWebhookSignature } from "./webhooks";
 
@@ -72,6 +72,43 @@ describe("PayPal client", () => {
       .mockResolvedValueOnce(token())
       .mockResolvedValueOnce(json({ ok: true }));
     await expect(paypalRequest("/x")).resolves.toEqual({ ok: true });
+  });
+
+  it("keeps the token for its ~9 hour life, refreshes a minute before expiry, and retries a 401 only once", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-09T09:00:00Z") });
+    try {
+      const tokenCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/v1/oauth2/token")).length;
+      fetchMock.mockImplementation(async (url: string) => (String(url).endsWith("/v1/oauth2/token") ? token() : json({ ok: true })));
+      await paypalRequest("/x");
+      vi.advanceTimersByTime(8 * 3600_000 + 58 * 60_000); // 8h58m: still the same token (expires_in 32400s = 9h)
+      await paypalRequest("/x");
+      expect(tokenCalls()).toBe(1);
+      vi.advanceTimersByTime(60_000); // 8h59m: inside the last minute, so a fresh one is fetched
+      await paypalRequest("/x");
+      expect(tokenCalls()).toBe(2);
+
+      // A second 401 in a row is an answer, not a glitch: no loop.
+      fetchMock.mockReset().mockImplementation(async (url: string) => (String(url).endsWith("/v1/oauth2/token") ? token() : json({ name: "AUTHENTICATION_FAILURE", debug_id: "d401" }, 401)));
+      const err = (await paypalRequest("/x").catch((e) => e)) as PayPalError;
+      expect(err.status).toBe(401);
+      expect(fetchMock.mock.calls.filter(([url]) => !String(url).endsWith("/v1/oauth2/token"))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("logs status, error name and debug_id, never the token or body, and gives the freelancer a plain sentence", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Recorded from the sandbox: reminding a draft.
+    const body = { name: "UNPROCESSABLE_ENTITY", message: "The requested action could not be performed, semantically incorrect, or failed business validation.", debug_id: "f34268289bfd1", details: [{ issue: "CANNOT_REMIND_INVOICE", description: "You cannot remind an invoice which is in DRAFT status. Only UNPAID, SENT and PARTIALLY_PAID invoices can be reminded." }] };
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json(body, 422));
+    const err = await paypalRequest("/v2/invoicing/invoices/INV2-1/remind", { method: "POST", body: { note: "secret client note", email: "client@example.com" } }).catch((e) => e);
+    const line = log.mock.calls.flat().join(" ");
+    expect(line).toBe("[paypal] POST /v2/invoicing/invoices/INV2-1/remind failed: status=422 name=UNPROCESSABLE_ENTITY issues=CANNOT_REMIND_INVOICE debug_id=f34268289bfd1");
+    expect(line).not.toMatch(/tok|secret|client@example/);
+    expect(plainPayPalMessage(err)).toBe("PayPal only sends reminders for invoices that have been sent and are still unpaid. Press Sync to see the invoice's current state. (PayPal reference f34268289bfd1)");
+    expect(plainPayPalMessage(new PayPalError("PayPal 503: down", 503, "x1"))).toMatch(/^PayPal is having trouble right now \(503\)\. Nothing was changed/);
+    log.mockRestore();
   });
 
   it("reports timeouts readably", async () => {

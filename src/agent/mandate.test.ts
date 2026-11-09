@@ -107,6 +107,18 @@ describe("checkAction: contact actions", () => {
   it("denies reminders on invoices that are not open", () => {
     expect(checkAction(reminder(), ctx({ invoice: { ...ctx().invoice, status: "PAID" } })).verdict).toBe("deny");
   });
+  it("denies every non-internal action once the invoice is closed in PayPal (cancelled, refunded, paid outside ClearDue)", () => {
+    const actions: AgentAction[] = [reminder(), message(), plan([50_000, 1], [50_000, 20]), { type: "pause_reminders", until: d(5) }, { type: "cancel_invoice", invoiceId: "INV2-1" }, { type: "record_payment", invoiceId: "INV2-1", amountMinor: 100 }];
+    for (const status of ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED", "MARKED_AS_REFUNDED", "PAID", "MARKED_AS_PAID"]) {
+      for (const a of actions) {
+        const r = checkAction(a, ctx({ invoice: { ...ctx().invoice, status } }));
+        expect(r.verdict, `${a.type} on ${status}`).toBe("deny");
+        expect(r.reasons.join(" ")).toMatch(/only acts on open invoices/);
+      }
+      // Reading the invoice and telling the freelancer are still fine.
+      expect(checkAction({ type: "read_invoice", invoiceId: "INV2-1" }, ctx({ invoice: { ...ctx().invoice, status } })).verdict).toBe("allow");
+    }
+  });
   it("denies actions on a different invoice, or when the invoice isn't on PayPal", () => {
     expect(checkAction(reminder({ invoiceId: "INV2-OTHER" }), ctx()).reasons).toContain("action targets a different invoice");
     const local = ctx({ invoice: { ...ctx().invoice, paypalInvoiceId: null } });
@@ -223,7 +235,7 @@ describe("checkAction: offer_plan", () => {
   });
   it("denies a plan on a closed invoice and an empty plan", () => {
     expect(checkAction(plan([50_000, 1], [50_000, 20]), ctx({ invoice: { ...ctx().invoice, status: "CANCELLED" } })).reasons).toContain(
-      "invoice is CANCELLED; no plan possible",
+      "invoice is cancelled; the agent only acts on open invoices",
     );
     expect(checkAction({ type: "offer_plan", instalments: [] }, ctx()).verdict).toBe("deny");
   });

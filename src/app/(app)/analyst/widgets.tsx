@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import type { AgWidgetField, AgWidgetParams } from "ag-studio";
 import type { AgWidgetDefinition } from "ag-studio-react";
+import { median } from "@/lib/utils";
 
 type Row = Record<string, unknown>;
 type Params = AgWidgetParams<{ dataMapping: { fields: unknown }; format?: never }>;
@@ -14,7 +15,8 @@ type Params = AgWidgetParams<{ dataMapping: { fields: unknown }; format?: never 
 function useRows(params: Params): Row[] | null {
   const fields = ((params.dataMapping as { fields?: AgWidgetField[] }).fields ?? []) as AgWidgetField[];
   const [rows, setRows] = useState<Row[] | null>(null);
-  const signature = fields.map((f) => f.key).join(",");
+  // Studio hands the widget a fresh params object on every refresh (a filter, a cross-filter, a date range), and only
+  // then; querying again on each one is what makes these widgets follow the page's filters.
   useEffect(() => {
     let live = true;
     if (!fields.length) return;
@@ -25,9 +27,8 @@ function useRows(params: Params): Row[] | null {
     return () => {
       live = false;
     };
-    // The fields array changes identity every render; its keys are what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, params.widgetApi]);
+  }, [params]);
   return fields.length ? rows : [];
 }
 
@@ -159,6 +160,23 @@ function PlansWidget(params: Params) {
   );
 }
 
+/** 4. Median days to paid, as a KPI. Studio's own median measure comes back empty in an ungrouped value widget, so the
+ * widget asks Studio for one row per invoice (through the page's client and date filters) and takes the median here. */
+function MedianDaysWidget(params: Params) {
+  const rows = useRows(params);
+  if (!rows) return <Empty text="Loading…" />;
+  const m = median(rows.map((r) => (r["Days to paid"] == null ? null : Number(r["Days to paid"]))));
+  const paid = rows.filter((r) => r["Days to paid"] != null).length;
+  return (
+    <div className="flex h-full flex-col justify-center px-4 pb-3">
+      <p className="text-[34px] leading-none font-bold tabular-nums" data-tour="median-days">
+        {m == null ? "No paid invoices" : `${Number.isInteger(m) ? m : m.toFixed(1)} day${m === 1 ? "" : "s"}`}
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">{paid === 1 ? "1 paid invoice" : `${paid} paid invoices`}</p>
+    </div>
+  );
+}
+
 const fieldset = (aiDescription: string) => ({ fields: { type: "fieldset" as const, supportedRoles: ["category", "numeric", "temporal"] as ("category" | "numeric" | "temporal")[], required: true, aiDescription } });
 
 const common = {
@@ -194,5 +212,15 @@ export const CUSTOM_WIDGETS = [
     dataMapping: fieldset("Plan instalment fields: Client, Plan, Strategy, Part, Amount, Currency, Due, Status, Paid."),
     defaultSize: { width: 12, height: 30 },
     ai: { description: "Each payment plan with its instalments and a progress bar of the paid ones.", usage: "Use to track plans in progress. Map the Payment plans fields." },
+  },
+  {
+    ...common,
+    id: "median-days",
+    label: "Median days to paid",
+    comp: MedianDaysWidget,
+    dataMapping: fieldset("Invoice fields: Invoice number and Days to paid, one row per invoice."),
+    minSize: { width: 4, height: 6 },
+    defaultSize: { width: 6, height: 8 },
+    ai: { description: "The median number of days from issue to payment over paid invoices, with how many were paid.", usage: "Use for how fast clients pay. Map Invoice number and Days to paid from Invoices." },
   },
 ] as unknown as AgWidgetDefinition[];

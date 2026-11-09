@@ -34,7 +34,14 @@ export const STEPS: TourStep[] = [
   },
   { id: "approvals", page: "approvals", target: "approvals", title: "Approvals", text: "Anything outside your limits waits here for you. Recent decisions show what ran, what waited and what was blocked.", side: "bottom" },
   { id: "pay", page: "pay", target: "pay-card", title: "The client's pay page", text: "What your client sees: answers only from the agreed scope, with quotes, and a Pay with PayPal button per invoice or plan part.", side: "left" },
-  { id: "analyst", page: "analyst", target: "analyst", title: "The analyst", text: "Ask about your receivables in plain English. Its suggestions always go to Approvals.", side: "bottom" },
+  {
+    id: "analyst",
+    page: "analyst",
+    target: "collection-rate",
+    title: "The analyst",
+    text: "Collection rate is paid invoices divided by issued ones. Click a client or pick dates and every widget follows. Ask the analyst anything; its suggestions go to Approvals.",
+    side: "bottom",
+  },
   { id: "finish", page: "welcome", target: "take-tour", title: "Replay any time", text: "Replay this tour any time from here or the ? in the menu.", side: "bottom" },
 ];
 

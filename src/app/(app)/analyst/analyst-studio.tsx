@@ -2,10 +2,10 @@
 
 // The collections analyst dashboard: AG Studio with ClearDue's three custom widgets, a theme matching the rest of the
 // app, a default report, and the analyst agent (a Client Tool Runner whose server side is /api/analyst/run).
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { Component, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AgStudioAiModule, clientToolRunner, createAiHarness, studioTheme, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
 import { AgStudio, AgStudioProvider, createWidgets } from "ag-studio-react";
-import type { DecisionRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
+import type { ClientRow, DecisionRow, InvoiceRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
 import { CUSTOM_WIDGETS } from "./widgets";
 
 const PAGE = "analyst";
@@ -40,32 +40,54 @@ const theme = studioTheme.withParams({
   chartSubtleTextColor: "#737373",
 } as never);
 
-const widgets = createWidgets({ additionalTypes: CUSTOM_WIDGETS as never, menu: [{ label: "ClearDue", widgetIds: ["owes", "decisions", "plans"] as never }, { label: "Standard", widgetIds: ["grid", "value", "bar-chart-grouped", "pie-chart", "list-filter"] as never }], defaultType: "grid" } as never);
+const widgets = createWidgets({ additionalTypes: CUSTOM_WIDGETS as never, menu: [{ label: "ClearDue", widgetIds: ["owes", "decisions", "plans", "median-days"] as never }, { label: "Standard", widgetIds: ["grid", "value", "bar-chart-grouped", "pie-chart", "button-filter", "date-filter"] as never }], defaultType: "grid" } as never);
 
 const fieldsOf = (source: string, names: string[]) => names.map((n) => ({ id: `${source}.${n}` }));
 const title = (text: string, subtitle: string) => ({ title: { enabled: true, text }, subtitle: { enabled: true, text: subtitle } });
 
-/** The report Studio opens with: the three ClearDue widgets, laid out on the 24-column canvas (stacked on a phone). */
+const kpi = (text: string, subtitle: string) => ({ ...title(text, subtitle), style: { typography: { fontSize: 34, fontWeight: "bold" }, verticalAlign: "center" } });
+
+/** The report Studio opens with, so nobody starts on an empty canvas: three KPIs (collection rate, median days to paid,
+ * recovered this month), a client picker and a date range that filter every widget, overdue invoices by reason, and
+ * the three ClearDue widgets. Laid out on the 24-column canvas, stacked on a phone. */
 const initialStateFor = (narrow: boolean) => ({
   selectedPageId: PAGE,
   pages: [
     {
       id: PAGE,
       widgets: {
+        collectionRate: { type: "value", dataMapping: { value: [{ id: "collectionRate" }] }, format: kpi("Collection rate", "Paid invoices ÷ issued invoices") },
+        medianDays: { type: "median-days", dataMapping: { fields: fieldsOf("invoices", ["invoice", "daysToPaid"]) }, format: title("Median days to paid", "From issue date to payment") },
+        recovered: { type: "value", dataMapping: { value: [{ id: "invoices.recoveredThisMonth", aggregation: "sum" }] }, format: kpi("Recovered this month", "Overdue invoices paid since the 1st") },
+        period: { type: "date-filter", dataMapping: { value: [{ id: "invoices.issued" }] }, format: { ...title("Issued between", "Set both dates; every widget follows"), style: { filterType: "between" } } },
+        clientFilter: { type: "button-filter", dataMapping: { value: [{ id: "clients.client" }] }, format: { ...title("Client", "Click one to filter the whole page"), style: { selection: { type: "single" }, defaultItem: { backgroundColor: "#ffffff", color: "#0a0a0a" }, activeItem: { backgroundColor: "#1f3fff", color: "#ffffff" } } } },
+        overdueByReason: { type: "bar-chart-grouped", dataMapping: { categoryKey: [{ id: "receivables.reason" }], valueKey: [{ id: "receivables.overdue", aggregation: "sum" }] }, format: title("Overdue by reason", "Overdue invoices, by the diagnosed reason") },
         owes: { type: "owes", dataMapping: { fields: fieldsOf("receivables", ["client", "invoice", "currency", "outstanding", "daysOverdue", "reason", "nextAction"]) }, format: title("Who still owes what", "Open invoices, most overdue first") },
         decisions: { type: "decisions", dataMapping: { fields: fieldsOf("decisions", ["client", "action", "verdict", "outcome", "reasons", "date"]) }, format: title("Mandate decisions", "The model proposes, the mandate decides") },
         plans: { type: "plans", dataMapping: { fields: fieldsOf("plans", ["client", "plan", "strategy", "part", "amount", "currency", "due", "status", "paid"]) }, format: title("Plan tracker", "Instalments paid and still to pay") },
       },
       widgetLayout: narrow
         ? {
-            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 20 },
-            decisions: { xTrack: 0, yTrack: 20, xSpan: 24, ySpan: 30 },
-            plans: { xTrack: 0, yTrack: 50, xSpan: 24, ySpan: 24 },
+            collectionRate: { xTrack: 0, yTrack: 0, xSpan: 12, ySpan: 8 },
+            medianDays: { xTrack: 12, yTrack: 0, xSpan: 12, ySpan: 8 },
+            recovered: { xTrack: 0, yTrack: 8, xSpan: 12, ySpan: 8 },
+            clientFilter: { xTrack: 12, yTrack: 8, xSpan: 12, ySpan: 8 },
+            period: { xTrack: 0, yTrack: 16, xSpan: 24, ySpan: 8 },
+            overdueByReason: { xTrack: 0, yTrack: 22, xSpan: 24, ySpan: 14 },
+            owes: { xTrack: 0, yTrack: 36, xSpan: 24, ySpan: 20 },
+            decisions: { xTrack: 0, yTrack: 56, xSpan: 24, ySpan: 30 },
+            plans: { xTrack: 0, yTrack: 86, xSpan: 24, ySpan: 24 },
           }
         : {
-            owes: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 18 },
-            decisions: { xTrack: 0, yTrack: 18, xSpan: 12, ySpan: 30 },
-            plans: { xTrack: 12, yTrack: 18, xSpan: 12, ySpan: 30 },
+            collectionRate: { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 8 },
+            medianDays: { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 8 },
+            recovered: { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 8 },
+            clientFilter: { xTrack: 0, yTrack: 8, xSpan: 6, ySpan: 12 },
+            period: { xTrack: 0, yTrack: 20, xSpan: 6, ySpan: 10 },
+            overdueByReason: { xTrack: 6, yTrack: 8, xSpan: 18, ySpan: 22 },
+            owes: { xTrack: 0, yTrack: 30, xSpan: 24, ySpan: 18 },
+            decisions: { xTrack: 0, yTrack: 48, xSpan: 12, ySpan: 30 },
+            plans: { xTrack: 12, yTrack: 48, xSpan: 12, ySpan: 30 },
           },
     },
   ],
@@ -101,16 +123,91 @@ const text = "textFormat";
 const int = "integerFormat";
 const dec = "decimalFormat";
 
-export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { licenseKey?: string; receivables: ReceivableRow[]; decisions: DecisionRow[]; plans: PlanPartRow[] }) {
+/** If Studio itself throws (a bad or expired key it refuses, a widget bug), the rest of the app keeps working. */
+class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error("[analyst] AG Studio failed to render", error);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div role="alert" className="rounded-lg border px-4 py-6 text-sm">
+        <p className="font-medium">The analyst report couldn&apos;t load.</p>
+        <p className="mt-1 text-muted-foreground">Your invoices are safe and every other page works. Check the AG Studio licence key (AG_STUDIO), then reload.</p>
+      </div>
+    );
+  }
+}
+
+interface Props {
+  licenseKey?: string;
+  clients: ClientRow[];
+  invoices: InvoiceRow[];
+  receivables: ReceivableRow[];
+  decisions: DecisionRow[];
+  plans: PlanPartRow[];
+}
+
+/** Studio's widgets carry no stable id in the DOM, so the tour's target (data-tour="collection-rate") is put on the
+ * collection-rate KPI by its title once Studio has drawn it. */
+function useTourTarget() {
+  useEffect(() => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const title = [...document.querySelectorAll(".ag-studio-layout-widget-title")].find((t) => t.textContent?.trim() === "Collection rate");
+      const widget = title?.closest(".ag-studio-layout-widget");
+      if (widget) widget.setAttribute("data-tour", "collection-rate");
+      if (widget || Date.now() - started > 20_000) clearInterval(timer);
+    }, 150);
+    return () => clearInterval(timer);
+  }, []);
+}
+
+export function AnalystStudio({ licenseKey, clients, invoices, receivables, decisions, plans }: Props) {
+  useTourTarget();
   const data = useMemo<AgDataSourcesDefinition>(
     () =>
       ({
+        description:
+          "A freelancer's receivables. invoices is the hub: receivables, decisions and plans join to it by invoiceId, and clients join to it by clientId, so a client or date filter narrows every table. Amounts are in each invoice's own currency and are never summed across currencies.",
         sources: [
+          {
+            id: "clients",
+            description: "The freelancer's clients.",
+            data: clients,
+            fields: [
+              { id: "clientId", name: "Client id", format: text, hide: true },
+              { id: "client", name: "Client", format: text },
+            ],
+          },
+          {
+            id: "invoices",
+            description: "Every invoice sent through PayPal, with whether and how fast it was paid. A plan's replaced original has issuedCount 0.",
+            data: invoices,
+            fields: [
+              { id: "invoiceId", name: "Invoice id", format: text, hide: true },
+              { id: "clientId", name: "Invoice client id", format: text, hide: true },
+              { id: "client", name: "Invoice client", format: text },
+              { id: "invoice", name: "Invoice number", format: text },
+              { id: "issued", name: "Issued", format: "dateFormat" },
+              { id: "status", name: "Invoice status", format: text },
+              { id: "issuedCount", name: "Issued (count)", format: int },
+              { id: "paidCount", name: "Paid (count)", format: int },
+              { id: "daysToPaid", name: "Days to paid", format: int },
+              { id: "recoveredThisMonth", name: "Recovered this month", format: int },
+            ],
+          },
           {
             id: "receivables",
             description: "Open invoices with the diagnosed reason and the next action.",
             data: receivables,
             fields: [
+              { id: "invoiceId", name: "Receivable invoice id", format: text, hide: true },
+              { id: "overdue", name: "Overdue (count)", format: int },
               { id: "client", name: "Client", format: text },
               { id: "invoice", name: "Invoice", format: text },
               { id: "currency", name: "Currency", format: text },
@@ -126,6 +223,7 @@ export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { l
             description: "Agent proposals and what the mandate decided about each.",
             data: decisions,
             fields: [
+              { id: "invoiceId", name: "Decision invoice id", format: text, hide: true },
               { id: "client", name: "Client", format: text },
               { id: "action", name: "Action", format: text },
               { id: "verdict", name: "Mandate verdict", format: text },
@@ -139,6 +237,7 @@ export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { l
             description: "Payment plan instalments and whether each is paid.",
             data: plans,
             fields: [
+              { id: "invoiceId", name: "Plan invoice id", format: text, hide: true },
               { id: "client", name: "Client", format: text },
               { id: "plan", name: "Plan", format: text },
               { id: "strategy", name: "Strategy", format: text },
@@ -151,8 +250,25 @@ export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { l
             ],
           },
         ],
+        // A star around invoices, so every widget is reachable from a client or a date by exactly one path.
+        relationships: [
+          { id: "client-invoices", source: { tableId: "clients", fieldId: "clientId" }, target: { tableId: "invoices", fieldId: "clientId" }, type: "one-to-many" },
+          { id: "invoice-receivable", source: { tableId: "invoices", fieldId: "invoiceId" }, target: { tableId: "receivables", fieldId: "invoiceId" }, type: "one-to-one" },
+          { id: "invoice-decisions", source: { tableId: "invoices", fieldId: "invoiceId" }, target: { tableId: "decisions", fieldId: "invoiceId" }, type: "one-to-many" },
+          { id: "invoice-plan-part", source: { tableId: "invoices", fieldId: "invoiceId" }, target: { tableId: "plans", fieldId: "invoiceId" }, type: "one-to-one" },
+        ],
+        expressions: [
+          {
+            id: "collectionRate",
+            name: "Collection rate",
+            description: "Paid invoices divided by issued invoices.",
+            isMeasure: true,
+            format: "percentageFormat",
+            expression: { operator: "divide", inputs: [{ id: "invoices.paidCount", aggregation: "sum" }, { id: "invoices.issuedCount", aggregation: "sum" }] },
+          },
+        ],
       }) as unknown as AgDataSourcesDefinition,
-    [receivables, decisions, plans],
+    [clients, invoices, receivables, decisions, plans],
   );
 
   // The widget editor is hidden until asked for, so the report gets the room; the AI panel is always there.
@@ -201,9 +317,11 @@ export function AnalystStudio({ licenseKey, receivables, decisions, plans }: { l
         )}
       </div>
       <div className={narrow ? "h-[1250px]" : "h-[calc(100vh-12rem)] min-h-[640px]"}>
+      <StudioBoundary>
       <AgStudioProvider modules={[AgStudioAiModule]} licenseKey={licenseKey}>
         <AgStudio style={{ height: "100%", width: "100%" }} mode="edit" panels={panels as never} data={data} initialState={initialState} widgets={widgets as never} theme={theme as never} ai={ai} />
       </AgStudioProvider>
+      </StudioBoundary>
       </div>
     </div>
   );

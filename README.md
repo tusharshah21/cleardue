@@ -74,7 +74,10 @@ flowchart LR
 `/analyst` is an [AG Studio](https://www.ag-grid.com/studio/) dashboard for the freelancer, built on the Studio Agent Framework:
 
 - **Three custom widgets** ([widgets.tsx](src/app/(app)/analyst/widgets.tsx)): *Who still owes what* (open invoices, most overdue first, with the diagnosed reason and next action), *Mandate decisions* (how many proposals the mandate allowed, held for approval or blocked, with reasons) and *Plan tracker* (each payment plan's instalments and progress). They are registered with `createWidgets`, so they take part in Studio's filters, editor and AI like the built-in widgets.
-- **Theme and report:** a Studio theme mapped to the app's colours and type, and a default report with the three widgets. The data sources are read server-side for the signed-in freelancer.
+- **A ready-made report, not an empty canvas:** the page opens on three KPIs (*Collection rate*, *Median days to paid*, *Recovered this month*), a client picker, an *Issued between* date range, *Overdue by reason*, and the three ClearDue widgets. The data sources are read server-side for the signed-in freelancer, with a Studio theme mapped to the app's colours and type.
+- **Collection rate is a Studio expression:** a measure defined as paid invoices divided by issued invoices over an `invoices` source (a plan's replaced original is not counted as issued, so a split invoice counts once per part). Median days to paid is a small custom KPI widget that takes the median of the filtered rows, because Studio's own `median` measure comes back empty in an ungrouped value widget.
+- **Relationships, so everything cross-filters:** `clients` joins to `invoices` by client id, and receivables, mandate decisions and plan parts join to `invoices` by invoice id (a star, so each widget is reachable by one path). Click a client, or set both dates of the range, and every widget on the page follows, the custom ones included.
+- **No key, no crash:** if `AG_STUDIO` is missing or past the expiry date written in the key, the page says so plainly above the report, and Studio still renders with AG's trial watermark. An error boundary keeps any Studio failure inside the report area.
 - **A custom agent on a swapped-in harness:** the collections analyst is a Client Tool Runner ([analyst-studio.tsx](src/app/(app)/analyst/analyst-studio.tsx)) whose server side ([route.ts](src/app/api/analyst/run/route.ts)) runs the app's model (Gemini or Claude) in a tool loop over read tools (receivables, decisions, plans) and four propose tools. Studio's AI panel is the front end, and our own server is the harness: we don't use Studio's built-in agents or their LLM adapter. That is the "custom agent / swapped-in harness" option the AG Grid prize describes, and it keeps the model, its key and the mandate gate on the server, never in the browser.
 - **Its proposals go through the mandate and always to Approvals.** The same check as the diagnosis agent runs, but the analyst can never auto-run anything: an action the mandate would allow is downgraded to "needs your approval", and a mandate denial stays a denial ([analyst.ts](src/agent/analyst.ts), [tests](src/agent/analyst.test.ts)). Approving a proposal checks the mandate again.
 
@@ -241,7 +244,31 @@ Put the printed id in `PAYPAL_WEBHOOK_ID`. Every event is checked with verify-we
 
 PayPal's webhook simulator sends mock events that [cannot pass verify-webhook-signature](https://developer.paypal.com/api/rest/webhooks/simulator/). They are rejected (and labelled) unless `ALLOW_UNVERIFIED_WEBHOOKS=true` outside production. Real sandbox payments produce verifiable events.
 
-Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`) re-syncs open invoices, ends expired pauses and retries pending plan sends. The Render blueprint runs it every 5 minutes, and the dashboard also triggers it after each load.
+Because webhooks can be late or missing, `POST /api/sync` (bearer `CRON_SECRET`) re-syncs open invoices, re-reads recently paid ones (to catch refunds), retries verified webhook events whose sync failed, ends expired pauses and retries pending plan sends. The Render blueprint runs it every 5 minutes, and the dashboard also triggers it after each load.
+
+## When things go wrong
+
+PayPal is the source of truth, and things change there without ClearDue being asked. This is what happens in each case, and how to check it. The tests for all of it use PayPal's own sample webhook payloads ([src/paypal/fixtures](src/paypal/fixtures), [src/lib/unhappy-paths.test.ts](src/lib/unhappy-paths.test.ts)).
+
+| What happened in PayPal | What ClearDue does |
+| --- | --- |
+| **Refund** (full or partial), `INVOICING.INVOICE.REFUNDED` | The invoice is re-read and becomes Refunded or Partly refunded. Any proposal still waiting is marked Superseded, the case is closed, and the timeline says "Refunded in PayPal, agent paused". A paid invoice is not polled as often as an open one, so polling also re-reads invoices paid in the last 180 days every 30 minutes: a refund is caught even if the webhook never arrives. |
+| **Cancelled from the PayPal dashboard**, `INVOICING.INVOICE.CANCELLED` | Same treatment: pending proposals superseded, case closed, timeline "Cancelled in PayPal, agent stopped". The mandate denies every action except reading the invoice and telling you once an invoice is not open (paid, cancelled or refunded), so the agent can never remind, reschedule or split it, even from an old proposal you approve later. |
+| **Paid outside ClearDue**, `INVOICING.INVOICE.PAID` | Marked paid, pending reminders superseded, timeline "Paid in PayPal outside ClearDue, reminders stopped". |
+| **A payment-plan part cancelled or refunded** | The plan is marked interrupted. The original invoice shows a banner and a timeline entry ("Part 2 of 2 was cancelled in PayPal"), and the other parts stay as they are. |
+| **Webhook retries** (PayPal resends for up to 3 days) | The route verifies the signature first, ignores an event id it has already processed, stores the event, answers 2xx and syncs after the response. A sync that fails leaves the event unprocessed for `/api/sync` to retry, so a slow PayPal read never becomes a 5xx and a retry storm. Unknown event types get a 2xx and a log line. |
+| **Access token expiry** | The OAuth token is cached for its lifetime (about 9 hours) minus a minute. A 401 clears it and the request is retried once with a fresh token; a second 401 is reported, not retried. |
+| **Any PayPal error** | The server log gets one line with the status, PayPal's error name, the issue codes and the `debug_id` (never the token or a request body). You see a plain sentence, for example "PayPal only sends reminders for invoices that have been sent and are still unpaid. Press Sync to see the invoice's current state. (PayPal reference f34268289bfd1)". |
+
+**Debugging with the PayPal sandbox dashboard** ([developer.paypal.com](https://developer.paypal.com/dashboard/), sandbox):
+
+- **API calls and error logs:** the dashboard's event logs list the app's API requests with their status, including failed ones with the error name. Search by the `debug_id` from ClearDue's log line or timeline; PayPal support asks for it too.
+- **Webhook events:** the [Sandbox Webhooks Events dashboard](https://developer.paypal.com/api/rest/webhooks/events-dashboard/) lists each event PayPal generated, filterable by date, resource and event type, with its delivery status (green check: received; yellow: pending). **Resend** replays a delivery; ClearDue ignores it if that event id was already processed. Community reports say Resend is unreliable in the sandbox, so `/api/sync` polling is the fallback either way.
+- **Sandbox notifications:** invoice and reminder emails PayPal "sends" in the sandbox are not delivered; they appear in the developer dashboard's sandbox notifications list instead.
+- **Menu names** in the dashboard change from time to time; the descriptions above are what to look for, not exact paths.
+- In ClearDue, an invoice's page lists the PayPal webhook events received for it (verified, processed or rejected, with the reason), and its timeline shows every status change and where it came from (webhook, polling, sync, plan).
+
+`npx tsx scripts/paypal-checks.mts <hosted url>` runs the checks behind [docs/paypal-doctor.md](docs/paypal-doctor.md): whether the webhook is registered for all four invoice events, whether `PAYPAL_WEBHOOK_ID` matches it, what PayPal sent recently, whether the hosted route answers, and whether a full draft update is accepted.
 
 ## Testing instructions
 

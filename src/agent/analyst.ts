@@ -31,11 +31,14 @@ export interface ReceivableRow {
   currency: string;
   outstanding: number;
   daysOverdue: number;
+  /** 1 when past due, so a chart can count overdue invoices by reason. */
+  overdue: number;
   status: string;
   reason: string;
   nextAction: string;
 }
 export interface DecisionRow {
+  invoiceId: string;
   client: string;
   action: string;
   verdict: string;
@@ -44,6 +47,7 @@ export interface DecisionRow {
   date: string;
 }
 export interface PlanPartRow {
+  invoiceId: string;
   client: string;
   plan: string;
   strategy: string;
@@ -80,6 +84,7 @@ export async function receivablesFor(freelancerId: string, now = new Date()): Pr
         currency: i.currency,
         outstanding: Number(fromMinor(i.totalMinor - i.paidMinor, i.currency)),
         daysOverdue: daysOverdue(i, now),
+        overdue: daysOverdue(i, now) > 0 ? 1 : 0,
         status: invoiceStatusLabel(i.status, daysOverdue(i, now)),
         reason: isPart ? "Payment plan" : i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "Not diagnosed",
         nextAction: isPart ? (daysOverdue(i, now) > 0 ? "Plan part is overdue: remind the client" : "Waiting for the due date") : pending ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}` : i.case?.reason ? "Waiting on the client" : "Run Diagnose now",
@@ -96,6 +101,7 @@ export async function decisionsFor(freelancerId: string): Promise<DecisionRow[]>
     take: 100,
   });
   return rows.map((p) => ({
+    invoiceId: p.case.invoiceId,
     client: p.case.invoice.client.name,
     action: describeProposal(p.type, p.params as Record<string, unknown>).title,
     verdict: p.mandateVerdict,
@@ -119,6 +125,7 @@ export async function plansFor(freelancerId: string): Promise<PlanPartRow[]> {
     seen.set(p.planGroupId!, n);
     const paid = p.status === "PAID" || p.status === "MARKED_AS_PAID";
     return {
+      invoiceId: p.id,
       client: p.client.name,
       plan: p.planGroupId!.slice(-6),
       strategy: STRATEGY_LABELS[p.planGroup?.strategy ?? ""] ?? "Plan",
@@ -132,7 +139,73 @@ export async function plansFor(freelancerId: string): Promise<PlanPartRow[]> {
   });
 }
 
-export const ANALYST_TOOLS = ["send_message", "pause_reminders", "offer_payment_plan", "escalate_dispute"] as const;
+export interface ClientRow {
+  clientId: string;
+  client: string;
+}
+/** One row per invoice that reached PayPal: the hub the other tables join through (invoiceId), and the source of the
+ * collection-rate KPI. A plan's replaced original is kept (its proposals join through it) but not counted as issued,
+ * so a split invoice counts once per part. */
+export interface InvoiceRow {
+  invoiceId: string;
+  clientId: string;
+  client: string;
+  invoice: string;
+  issued: string;
+  status: string;
+  issuedCount: number;
+  paidCount: number;
+  /** Whole days from issue to payment; null until paid. */
+  daysToPaid: number | null;
+  /** Paid this calendar month after its due date had passed. */
+  recoveredThisMonth: number;
+}
+
+const PAID_STATUSES = ["PAID", "MARKED_AS_PAID"];
+
+export function invoiceRow(
+  i: { id: string; clientId: string; invoiceNumber: string | null; status: string; issueDate: Date; dueDate: Date; updatedAt: Date; client: { name: string } },
+  opts: { paidAt: Date | null; replaced: boolean; now: Date },
+): InvoiceRow {
+  const paid = PAID_STATUSES.includes(i.status);
+  const paidAt = paid ? (opts.paidAt ?? i.updatedAt) : null;
+  const sameMonth = (d: Date) => d.getUTCFullYear() === opts.now.getUTCFullYear() && d.getUTCMonth() === opts.now.getUTCMonth();
+  return {
+    invoiceId: i.id,
+    clientId: i.clientId,
+    client: i.client.name,
+    invoice: i.invoiceNumber ?? i.id.slice(-6),
+    issued: ymd(i.issueDate),
+    status: invoiceStatusLabel(i.status),
+    issuedCount: opts.replaced ? 0 : 1,
+    paidCount: paid ? 1 : 0,
+    daysToPaid: paidAt ? Math.max(0, Math.round((paidAt.getTime() - i.issueDate.getTime()) / 86_400_000)) : null,
+    recoveredThisMonth: paidAt && sameMonth(paidAt) && ymd(paidAt) > ymd(i.dueDate) ? 1 : 0,
+  };
+}
+
+export async function clientsFor(freelancerId: string): Promise<ClientRow[]> {
+  const clients = await db.client.findMany({ where: { freelancerId }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  return clients.map((c) => ({ clientId: c.id, client: c.name }));
+}
+
+export async function invoicesFor(freelancerId: string, now = new Date()): Promise<InvoiceRow[]> {
+  const invoices = await db.invoice.findMany({ where: { client: { freelancerId }, status: { not: "DRAFT" } }, include: { client: true }, orderBy: { issueDate: "asc" } });
+  const ids = invoices.map((i) => i.id);
+  const [plans, paidEvents] = await Promise.all([
+    db.planGroup.findMany({ where: { originalInvoiceId: { in: ids }, state: { not: "aborted" } }, select: { originalInvoiceId: true } }),
+    // When the status turned paid, as recorded by syncInvoice ("PayPal status SENT → PAID (...)").
+    db.timelineEvent.findMany({ where: { invoiceId: { in: ids }, kind: "status_changed", OR: [{ summary: { contains: "→ PAID" } }, { summary: { contains: "→ MARKED_AS_PAID" } }] }, orderBy: { createdAt: "asc" }, select: { invoiceId: true, createdAt: true } }),
+  ]);
+  const replaced = new Set(plans.map((p) => p.originalInvoiceId));
+  const paidAt = new Map<string, Date>();
+  for (const e of paidEvents) if (!paidAt.has(e.invoiceId)) paidAt.set(e.invoiceId, e.createdAt);
+  // Paid rows first: AG Studio infers a column's type from its first values, and a leading run of nulls in daysToPaid
+  // leaves it untyped (every measure on it comes back empty).
+  return invoices.map((i) => invoiceRow(i, { paidAt: paidAt.get(i.id) ?? null, replaced: replaced.has(i.id), now })).sort((a, b) => (b.daysToPaid ?? -1) - (a.daysToPaid ?? -1));
+}
+
+export const ANALYST_TOOLS =["send_message", "pause_reminders", "offer_payment_plan", "escalate_dispute"] as const;
 
 export type AnalystProposal =
   | { status: "queued_for_freelancer_approval"; proposalId: string; reasons: string[] }
