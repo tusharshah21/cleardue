@@ -48,7 +48,7 @@ vi.mock("./cases", async (importOriginal) => ({
   loadInvoice: async (id: string) => all().find((i) => i.id === id),
 }));
 
-const { proposeFromAnalyst } = await import("./analyst");
+const { invoiceRow, proposeFromAnalyst } = await import("./analyst");
 const nudge = { to: "client", tone: "friendly", subject: "Quick nudge", body: "Hi, a friendly reminder about the invoice. Thanks!" };
 
 beforeEach(() => {
@@ -90,5 +90,24 @@ describe("proposeFromAnalyst", () => {
     const r = await proposeFromAnalyst("f1", { invoice: "Nobody", tool: "send_message", input: nudge }, NOW);
     expect(r).toMatchObject({ status: "error" });
     expect(h.rows).toHaveLength(0);
+  });
+});
+
+describe("collection-rate rows", () => {
+  const NOW_ = new Date("2026-11-20T12:00:00Z");
+  const inv = (status: string, issue: string, due: string) => ({ id: "i1", clientId: "c1", invoiceNumber: "0042", status, issueDate: new Date(`${issue}T09:00:00Z`), dueDate: new Date(`${due}T09:00:00Z`), updatedAt: NOW_, client: { name: "Acme" } });
+
+  it("counts a paid invoice as issued and paid, with whole days to paid", () => {
+    const r = invoiceRow(inv("PAID", "2026-11-01", "2026-11-15"), { paidAt: new Date("2026-11-11T18:00:00Z"), replaced: false, now: NOW_ });
+    expect(r).toMatchObject({ issuedCount: 1, paidCount: 1, daysToPaid: 10, recoveredThisMonth: 0, issued: "2026-11-01" });
+  });
+  it("counts an overdue invoice paid this month as recovered", () => {
+    expect(invoiceRow(inv("PAID", "2026-10-01", "2026-10-15"), { paidAt: new Date("2026-11-03T10:00:00Z"), replaced: false, now: NOW_ }).recoveredThisMonth).toBe(1);
+  });
+  it("an unpaid, cancelled or refunded invoice has no days to paid", () => {
+    for (const s of ["SENT", "CANCELLED", "REFUNDED"]) expect(invoiceRow(inv(s, "2026-11-01", "2026-11-15"), { paidAt: null, replaced: false, now: NOW_ })).toMatchObject({ paidCount: 0, daysToPaid: null });
+  });
+  it("a plan's replaced original is not counted as issued, so a split invoice counts once per part", () => {
+    expect(invoiceRow(inv("CANCELLED", "2026-11-01", "2026-11-15"), { paidAt: null, replaced: true, now: NOW_ }).issuedCount).toBe(0);
   });
 });

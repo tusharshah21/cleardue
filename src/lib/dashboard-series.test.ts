@@ -40,3 +40,12 @@ describe("dashboard series", () => {
     expect(netChange([])).toEqual({ text: "0", trend: "flat" });
   });
 });
+
+describe("median", () => {
+  it("takes the middle value, averages the middle pair, and ignores nulls", async () => {
+    const { median } = await import("./utils");
+    expect(median([5, 1, 3])).toBe(3);
+    expect(median([4, 1, null, 2, 3])).toBe(2.5);
+    expect(median([null, undefined, "x"])).toBeNull();
+  });
+});
