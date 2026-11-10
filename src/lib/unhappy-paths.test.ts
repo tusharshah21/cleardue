@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown> & { id: string };
-const h = vi.hoisted(() => ({ tables: {} as Record<string, Row[]>, paypal: new Map<string, { status: string; paid?: string }>(), seq: 0, getFails: false }));
+const h = vi.hoisted(() => ({ tables: {} as Record<string, Row[]>, paypal: new Map<string, { status: string; paid?: string }>(), seq: 0, getFails: false, holdReason: null as string | null }));
 
 function matches(row: Row, where: Record<string, unknown> = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
@@ -63,6 +63,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/paypal/invoices", async (orig) => ({
   ...(await orig<typeof import("@/paypal/invoices")>()),
+  heldPaymentReason: async () => h.holdReason,
   getInvoice: async (id: string) => {
     if (h.getFails) throw new Error("PayPal did not respond within 15s");
     const p = h.paypal.get(id)!;
@@ -103,6 +104,7 @@ beforeEach(() => {
   h.tables = { invoice: [] };
   h.paypal.clear();
   h.getFails = false;
+  h.holdReason = null;
   afterQueue.length = 0;
   verify.mockReset().mockResolvedValue({ verified: true });
 });
@@ -223,5 +225,92 @@ describe("webhook route", () => {
     expect(r.webhooksRetried).toBe(1);
     expect(rows("invoice")[0].status).toBe("CANCELLED");
     vi.mocked(console.error).mockRestore();
+  });
+});
+
+describe("(e) a payment PayPal is holding (the buyer has paid, the money is not released)", () => {
+  // Recorded from the sandbox: PayPal sent INVOICING.INVOICE.PAID for a payment whose invoice then read PAYMENT_PENDING
+  // and whose capture was PENDING with reason RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION (src/paypal/fixtures).
+  const held = "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION";
+
+  it("a PAID event for a held payment does not mark the invoice paid: it says so, and the agent waits", async () => {
+    seed("SENT", { pending: ["send_invoice_reminder"] });
+    h.paypal.set(PP_ID, { status: "PAYMENT_PENDING" });
+    h.holdReason = held;
+    expect(await deliver("paid")).toBe(true);
+    expect(rows("invoice")[0]).toMatchObject({ status: "PAYMENT_PENDING", paidMinor: 0 });
+    const all = timeline().join(" | ");
+    expect(all).toMatch(/Payment received, held by PayPal\. PayPal is waiting for the receiving PayPal account to accept it/);
+    expect(all).toMatch(/The agent is paused on this invoice \(no reminders, no rescheduling\) until PayPal completes it\./);
+    expect(all).not.toMatch(/Paid in PayPal|reminders stopped/);
+    expect(rows("proposedAction")[0].status).toBe("superseded"); // a reminder for a client who has already paid is moot
+    expect(rows("case")[0].state).toBe("open"); // not resolved: the money has not arrived
+    expect(rows("webhookEvent")[0].processed).toBe(true);
+    expect(rows("timelineEvent").find((e) => e.kind === "payment_held")?.data).toEqual({ reason: held });
+  });
+
+  it("says plainly when PayPal gives an unfamiliar reason, or none", async () => {
+    seed("SENT");
+    h.paypal.set(PP_ID, { status: "PAYMENT_PENDING" });
+    h.holdReason = "SOME_NEW_REASON";
+    await deliver("paid");
+    expect(timeline().join(" ")).toContain("PayPal's reason: some new reason.");
+    h.tables = { invoice: [] };
+    seed("SENT");
+    h.holdReason = null;
+    await deliver("paid");
+    expect(timeline().join(" ")).toContain("Payment received, held by PayPal. PayPal didn't say why.");
+  });
+
+  it("polling backup: when PayPal completes the payment the invoice becomes paid, the case closes and the note says it cleared", async () => {
+    seed("PAYMENT_PENDING");
+    h.paypal.set(PP_ID, { status: "PAID", paid: "500.00" });
+    const r = await syncStale(); // a held invoice is not closed, so it is re-read like any open one
+    expect(r.synced).toBe(1);
+    expect(rows("invoice")[0]).toMatchObject({ status: "PAID", paidMinor: 50_000 });
+    expect(timeline()).toContain("Payment cleared: PayPal released the held payment. Paid, reminders stopped.");
+    expect(timeline().join(" ")).not.toMatch(/outside ClearDue/);
+    expect(rows("case")[0].state).toBe("resolved");
+  });
+
+  it("webhook: the same completion arriving as a verified event does the same", async () => {
+    seed("PAYMENT_PENDING");
+    h.paypal.set(PP_ID, { status: "PAID", paid: "500.00" });
+    expect(await deliver("paid")).toBe(true);
+    expect(rows("invoice")[0].status).toBe("PAID");
+    expect(timeline().some((s) => s.startsWith("Payment cleared"))).toBe(true);
+  });
+
+  it("if PayPal releases it back to unpaid, the invoice is open again and says so", async () => {
+    seed("PAYMENT_PENDING");
+    h.paypal.set(PP_ID, { status: "SENT" });
+    await syncStale();
+    expect(rows("invoice")[0].status).toBe("SENT");
+    expect(timeline()).toContain("PayPal did not complete the held payment, so the invoice is unpaid again. The agent can act on it again.");
+  });
+
+  it("a payment-capture event names its invoice in invoice_id, and is processed like an invoice event", async () => {
+    seed("SENT");
+    h.paypal.set(PP_ID, { status: "PAYMENT_PENDING" });
+    h.holdReason = held;
+    // Shape per PayPal's documentation (the webhook did not subscribe to these when the real payment happened).
+    const event = { id: "WH-CAPTURE-1", event_type: "PAYMENT.CAPTURE.PENDING", resource: { id: "12Y361605S103763T", status: "PENDING", invoice_id: PP_ID } };
+    expect(await handleWebhookEvent(event, { verified: true, process: true, note: null, source: "webhook" })).toBe(true);
+    expect(rows("invoice")[0].status).toBe("PAYMENT_PENDING");
+    expect(rows("webhookEvent")[0]).toMatchObject({ eventType: "PAYMENT.CAPTURE.PENDING", resourceId: PP_ID, processed: true });
+  });
+});
+
+describe("(e2) a payment already marked held before the explanation existed", () => {
+  it("is explained once on the next sync, and not again", async () => {
+    seed("PAYMENT_PENDING", { pending: ["send_invoice_reminder"] });
+    h.paypal.set(PP_ID, { status: "PAYMENT_PENDING" });
+    h.holdReason = "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION";
+    await syncStale();
+    expect(timeline().filter((s) => s.startsWith("Payment received, held by PayPal"))).toHaveLength(1);
+    expect(rows("proposedAction")[0].status).toBe("superseded");
+    rows("invoice")[0].lastSyncedAt = old;
+    await syncStale();
+    expect(timeline().filter((s) => s.startsWith("Payment received, held by PayPal"))).toHaveLength(1);
   });
 });

@@ -12,8 +12,12 @@ interface Owed {
 }
 
 export const isOpen = (i: Owed) => OPEN_STATUSES.includes(i.status);
+/** The client has paid and PayPal is holding the money (the receiving account has to accept it, or PayPal is reviewing
+ * it). Still not received, so it counts as owed, but chasing the client would be wrong: never overdue. */
+export const HELD_STATUS = "PAYMENT_PENDING";
+export const isHeld = (i: Pick<Owed, "status">) => i.status === HELD_STATUS;
 export const daysOverdue = (i: Owed, now = new Date()) =>
-  isOpen(i) ? Math.max(0, Math.floor((now.getTime() - i.dueDate.getTime()) / 86_400_000)) : 0;
+  isOpen(i) && !isHeld(i) ? Math.max(0, Math.floor((now.getTime() - i.dueDate.getTime()) / 86_400_000)) : 0;
 export const outstanding = (i: Owed) => (isOpen(i) ? i.totalMinor - i.paidMinor : 0);
 
 /** Clients bill in different currencies, so totals stay per currency: "$2,400.00 · £1,800.00". */

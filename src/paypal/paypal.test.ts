@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkPayPalAuth, getAccessToken, PayPalError, paypalRequest, plainPayPalMessage, resetAuthCheck, resetTokenCache } from "./client";
 import { buildInvoiceBody, createDraftInvoice, sendInvoice, updateDraftInvoice } from "./invoices";
+import { readFileSync } from "node:fs";
+import { heldPaymentReason } from "./invoices";
 import { invoiceIdOf, verifyWebhookSignature } from "./webhooks";
 
 const json = (body: unknown, status = 200) =>
@@ -250,5 +252,30 @@ describe("credential watch", () => {
     vi.stubEnv("PAYPAL_MODE", "mock");
     expect(await checkPayPalAuth()).toEqual({ ok: true });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("held payments", () => {
+  const pending = JSON.parse(readFileSync("src/paypal/fixtures/invoice-payment-pending.json", "utf8"));
+  const capture = JSON.parse(readFileSync("src/paypal/fixtures/capture-pending.json", "utf8"));
+
+  it("finds the invoice a capture event names (invoice_id), and leaves invoice events as they were", () => {
+    expect(invoiceIdOf({ id: "1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: { id: "CAP1", invoice_id: "INV2-X" } })).toBe("INV2-X");
+    expect(invoiceIdOf({ id: "2", event_type: "INVOICING.INVOICE.PAID", resource: { id: "INV2-Y" } })).toBe("INV2-Y");
+    expect(invoiceIdOf({ id: "3", event_type: "INVOICING.INVOICE.PAID", resource: { invoice: { id: "INV2-Z" } } })).toBe("INV2-Z");
+  });
+
+  it("reads PayPal's reason for the hold from the payment, with the recorded responses", async () => {
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json(capture));
+    expect(await heldPaymentReason(pending)).toBe("RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api-m.sandbox.paypal.com/v2/payments/captures/12Y361605S103763T");
+  });
+
+  it("is null, never an error, when the lookup fails or there is no payment id", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchMock.mockResolvedValueOnce(token()).mockResolvedValueOnce(json({ name: "NOT_AUTHORIZED", debug_id: "abc" }, 403));
+    expect(await heldPaymentReason(pending)).toBeNull();
+    expect(await heldPaymentReason({ ...pending, payments: {} })).toBeNull();
+    vi.mocked(console.error).mockRestore();
   });
 });

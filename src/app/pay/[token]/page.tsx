@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableFooter, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
-import { daysOverdue, isOpen } from "@/lib/receivables";
+import { daysOverdue, isHeld, isOpen } from "@/lib/receivables";
 import { pendingAcceptance, planOptions } from "@/plans/accept";
 import { strategyFor } from "@/plans/plans";
 import type { LineItem } from "@/paypal/invoices";
@@ -94,6 +94,8 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
             <p className="rounded-lg bg-muted p-3 text-sm">Paid. Thank you!</p>
           ) : plan?.invoices.length ? (
             <p className="rounded-lg bg-muted p-3 text-sm">This invoice was replaced by the payment plan below.</p>
+          ) : isHeld(invoice) ? (
+            <p className="rounded-lg bg-muted p-3 text-sm">Your payment has been received and PayPal is still processing it. There is nothing more for you to do, and please don&apos;t pay again.</p>
           ) : open && invoice.payerViewUrl ? (
             <div className="space-y-3">
               <a href={invoice.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "lg", className: "w-full" })}>
@@ -128,8 +130,8 @@ export default async function PayPage({ params }: PageProps<"/pay/[token]">) {
                   <StatusBadge status={p.status} overdueDays={isOpen(p) ? daysOverdue(p) : 0} />
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-muted-foreground">{isPaid(p.status) ? "Paid, thank you." : `Due ${ymd(p.dueDate)}`}</span>
-                  {isPaid(p.status) ? null : isOpen(p) && p.payerViewUrl ? (
+                  <span className="text-muted-foreground">{isPaid(p.status) ? "Paid, thank you." : isHeld(p) ? "Payment received, PayPal is processing it." : `Due ${ymd(p.dueDate)}`}</span>
+                  {isPaid(p.status) || isHeld(p) ? null : isOpen(p) && p.payerViewUrl ? (
                     <div className="flex flex-wrap items-start gap-2">
                       <a href={p.payerViewUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "sm" })}>
                         Pay with PayPal

@@ -2,15 +2,19 @@
 import { paypalRequest } from "./client";
 
 export const INVOICE_EVENTS = ["INVOICING.INVOICE.PAID", "INVOICING.INVOICE.UPDATED", "INVOICING.INVOICE.CANCELLED", "INVOICING.INVOICE.REFUNDED"];
+/** The payment itself: a pending (held) payment, its completion, or PayPal denying it. Each names the invoice it paid
+ * in resource.invoice_id, and like the invoice events it only tells us which invoice to re-read. */
+export const CAPTURE_EVENTS = ["PAYMENT.CAPTURE.PENDING", "PAYMENT.CAPTURE.COMPLETED", "PAYMENT.CAPTURE.DENIED"];
+export const WEBHOOK_EVENTS = [...INVOICE_EVENTS, ...CAPTURE_EVENTS];
 
 export interface WebhookEventBody {
   id: string;
   event_type: string;
-  resource?: { id?: string; invoice?: { id?: string } };
+  resource?: { id?: string; invoice?: { id?: string }; invoice_id?: string };
 }
 
 /** The invoice id an invoicing event refers to (PayPal nests it under resource.invoice for v2 invoicing). */
-export const invoiceIdOf = (e: WebhookEventBody) => e.resource?.invoice?.id ?? e.resource?.id ?? null;
+export const invoiceIdOf = (e: WebhookEventBody) => e.resource?.invoice?.id ?? (e.event_type.startsWith("PAYMENT.CAPTURE.") ? e.resource?.invoice_id : e.resource?.id) ?? null;
 
 export async function verifyWebhookSignature(headers: Headers, event: unknown): Promise<{ verified: boolean; reason?: string }> {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID;
@@ -39,7 +43,15 @@ export async function verifyWebhookSignature(headers: Headers, event: unknown): 
 export function createWebhook(url: string) {
   return paypalRequest<{ id: string }>("/v1/notifications/webhooks", {
     method: "POST",
-    body: { url, event_types: INVOICE_EVENTS.map((name) => ({ name })) },
+    body: { url, event_types: WEBHOOK_EVENTS.map((name) => ({ name })) },
+  });
+}
+
+/** Points an existing webhook at the current event list (a webhook's events can be changed in place). */
+export function setWebhookEvents(webhookId: string) {
+  return paypalRequest<unknown>(`/v1/notifications/webhooks/${encodeURIComponent(webhookId)}`, {
+    method: "PATCH",
+    body: [{ op: "replace", path: "/event_types", value: WEBHOOK_EVENTS.map((name) => ({ name })) }],
   });
 }
 

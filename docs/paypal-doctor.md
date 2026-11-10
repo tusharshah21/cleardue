@@ -39,6 +39,15 @@ The brief asked for the PayPal AI Toolkit's `/paypal:doctor` (whole repo, then s
 - **Cause:** a reminder sent for an invoice that is not open. In ClearDue this can only happen if the local status is stale, because the mandate already denies reminders on invoices that aren't open.
 - **Fix:** mapped to "PayPal only sends reminders for invoices that have been sent and are still unpaid. Press Sync to see the invoice's current state." (with the PayPal reference), and pinned by a test.
 
+## Real finding: a payment PayPal holds (2026-11-10)
+
+A UK personal sandbox buyer paid a GBP 900 split-plan part to the India business account. PayPal's answer, read straight from the API: the invoice was `PAYMENT_PENDING`, its transaction `PENDING`, and the payment (capture) `PENDING` with reason `RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION` (the receiving account's payment preferences need someone to accept the payment). PayPal still sent `INVOICING.INVOICE.PAID`, so the event type alone does not mean the money has arrived.
+
+- **What ClearDue did before:** stored the status and showed "Payment processing", but treated the invoice as an ordinary open one: it still counted as owed, could be reminded, and the timeline had no explanation.
+- **Fixed:** the invoice is held, not paid. The timeline gives PayPal's reason in plain English (read from the payment, since the Invoicing API only says `PAYMENT_PENDING`), waiting proposals are superseded, the mandate denies everything except reading the invoice, the pay page stops offering a Pay button, and it is never overdue. Completion (webhook or polling) moves it to Paid, release moves it back to open. Tests: [src/lib/unhappy-paths.test.ts](../src/lib/unhappy-paths.test.ts), [mandate](../src/agent/mandate.test.ts), [receivables](../src/lib/receivables.test.ts).
+- **Webhook gap, fixed:** the webhook listened only for invoice events, so PayPal's own pending and completed payment events never reached ClearDue. It now also listens for `PAYMENT.CAPTURE.PENDING`, `COMPLETED` and `DENIED` (`npm run paypal:webhook -- events` applies the list to an existing webhook).
+- **Not something ClearDue can fix:** whether the receiving account accepts the payment is the business account's setting in PayPal.
+
 ## Chosen not to fix
 
 - Negative testing on the Invoicing API: not supported by this sandbox app, see above.

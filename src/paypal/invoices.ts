@@ -1,7 +1,7 @@
 // PayPal Invoicing API v2. Every money-affecting call here must be reached through the
 // mandate check (src/agent), never directly from AI output.
 import { fromMinor } from "@/lib/money";
-import { paypalRequest } from "./client";
+import { isMockMode, paypalRequest } from "./client";
 
 const BASE = "/v2/invoicing/invoices";
 
@@ -40,7 +40,7 @@ export interface PayPalInvoice {
   configuration?: { partial_payment?: { allow_partial_payment?: boolean; minimum_amount_due?: { value: string } } };
   amount?: { currency_code: string; value: string };
   due_amount?: { currency_code: string; value: string };
-  payments?: { paid_amount?: { currency_code: string; value: string } };
+  payments?: { paid_amount?: { currency_code: string; value: string }; transactions?: { payment_id?: string; transaction_status?: string }[] };
 }
 
 interface LinkDescription {
@@ -143,4 +143,19 @@ export function recordPayment(id: string, payment: { amount: { currency_code: st
 
 export function deleteDraftInvoice(id: string) {
   return paypalRequest<void>(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Why PayPal is holding a pending payment: the reason code on the payment itself (PayPal's Payments API), because the
+ * Invoicing API only says PAYMENT_PENDING. Best effort: null if there is no payment id or the lookup fails (the
+ * failure is logged by the client with its debug_id, and the freelancer still sees that the payment is held). */
+export async function heldPaymentReason(invoice: PayPalInvoice): Promise<string | null> {
+  const txns = invoice.payments?.transactions ?? [];
+  const id = (txns.find((t) => t.transaction_status === "PENDING") ?? txns[0])?.payment_id;
+  if (!id || isMockMode()) return null;
+  try {
+    const capture = await paypalRequest<{ status_details?: { reason?: string } }>(`/v2/payments/captures/${encodeURIComponent(id)}`);
+    return capture.status_details?.reason ?? null;
+  } catch {
+    return null;
+  }
 }

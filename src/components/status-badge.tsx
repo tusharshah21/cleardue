@@ -6,7 +6,7 @@ const LABELS: Record<string, string> = {
   SCHEDULED: "Scheduled",
   SENT: "Sent, awaiting payment",
   UNPAID: "Unpaid",
-  PAYMENT_PENDING: "Payment processing",
+  PAYMENT_PENDING: "Payment held by PayPal",
   PARTIALLY_PAID: "Partly paid",
   PAID: "Paid",
   MARKED_AS_PAID: "Paid (recorded)",

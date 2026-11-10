@@ -3,8 +3,8 @@
 import { randomBytes } from "node:crypto";
 import type { Client, Freelancer, Invoice } from "@/generated/prisma/client";
 import { toMinor } from "@/lib/money";
-import { createDraftInvoice, getInvoice, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
-import { INVOICE_EVENTS, invoiceIdOf, type WebhookEventBody } from "@/paypal/webhooks";
+import { createDraftInvoice, getInvoice, heldPaymentReason, sendInvoice, updateDraftInvoice, type LineItem, type PayPalInvoice } from "@/paypal/invoices";
+import { invoiceIdOf, WEBHOOK_EVENTS, type WebhookEventBody } from "@/paypal/webhooks";
 import { PayPalError, plainPayPalMessage } from "@/paypal/client";
 import { supersedePending } from "@/agent/supersede";
 import { db } from "./db";
@@ -129,6 +129,29 @@ export async function addLineToDraft(freelancer: Freelancer, client: Client, pro
 const PAID = ["PAID", "MARKED_AS_PAID"];
 const REFUNDED = ["REFUNDED", "PARTIALLY_REFUNDED", "MARKED_AS_REFUNDED"];
 export const CLOSED = [...PAID, "CANCELLED", ...REFUNDED];
+const HELD = "PAYMENT_PENDING";
+
+/** PayPal's reason codes for a held payment, as a sentence. The codes come from the payment's status_details. */
+const HOLD_REASON: Record<string, string> = {
+  RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION: "PayPal is waiting for the receiving PayPal account to accept it: that account's payment preferences need someone to accept each payment (for example one in a currency the account doesn't hold). Open the payment in the business account's Activity and accept it.",
+  PENDING_REVIEW: "PayPal is reviewing the payment.",
+  VERIFICATION_REQUIRED: "PayPal needs the receiving account to be verified before it releases the payment.",
+  ECHECK: "The payment is an eCheck and is waiting to clear.",
+  INTERNATIONAL_WITHDRAWAL: "PayPal needs the receiving account to accept or deny the payment in its account overview.",
+  TRANSACTION_APPROVED_AWAITING_FUNDING: "The client's funds are still being collected.",
+};
+
+/** What the freelancer reads when PayPal starts or stops holding a client's payment (not when it simply completes: that
+ * is closureNote's "paid"). `reason` is PayPal's code for the hold, when it could be read. */
+export function heldNote(prev: string, next: string, reason: string | null): { kind: string; summary: string; data?: object } | null {
+  if (prev === next) return null;
+  if (next === HELD) {
+    const why = reason ? (HOLD_REASON[reason] ?? `PayPal's reason: ${reason.replaceAll("_", " ").toLowerCase()}.`) : "PayPal didn't say why.";
+    return { kind: "payment_held", summary: `Payment received, held by PayPal. ${why} The agent is paused on this invoice (no reminders, no rescheduling) until PayPal completes it.`, data: { reason } };
+  }
+  if (prev === HELD && !CLOSED.includes(next)) return { kind: "payment_released", summary: "PayPal did not complete the held payment, so the invoice is unpaid again. The agent can act on it again." };
+  return null;
+}
 
 /** What the freelancer reads when an invoice closes. `source` says who noticed: our own plan flow cancels the original
  * itself, so that one gets no "in PayPal" note; webhooks and polling mean it happened outside ClearDue. */
@@ -140,6 +163,7 @@ export function closureNote(prev: string, next: string, source: string): { kind:
   }
   if (next === "CANCELLED") return { kind: "paypal_cancelled", summary: "Cancelled in PayPal, agent stopped. It will not remind, reschedule or split this invoice." };
   if (PAID.includes(prev)) return null;
+  if (prev === HELD) return { kind: "paypal_paid", summary: "Payment cleared: PayPal released the held payment. Paid, reminders stopped." };
   return { kind: "paypal_paid", summary: outside ? "Paid in PayPal outside ClearDue, reminders stopped." : "Paid, reminders stopped." };
 }
 
@@ -150,7 +174,16 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
   if (!invoice.paypalInvoiceId) return invoice;
   const fresh = await getInvoice(invoice.paypalInvoiceId);
   const updated = await db.invoice.update({ where: { id: invoice.id }, data: statusFields(fresh, invoice.currency) });
-  if (updated.status === invoice.status) return updated;
+  if (updated.status === invoice.status) {
+    // A payment already marked held before the explanation existed (or before a deploy): say why, once.
+    if (updated.status === HELD && !(await db.timelineEvent.findFirst({ where: { invoiceId: invoice.id, kind: "payment_held" } }))) {
+      const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
+      const held = heldNote("", HELD, await heldPaymentReason(fresh));
+      if (held) await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase?.id, ...held } });
+      if (kase) await supersedePending(kase.id, invoice.id, "the client's payment is held by PayPal");
+    }
+    return updated;
+  }
   const closed = CLOSED.includes(updated.status);
   if (closed) await db.task.updateMany({ where: { invoiceId: invoice.id, done: false }, data: { done: true } });
   const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
@@ -159,6 +192,10 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
   });
   const note = closureNote(invoice.status, updated.status, source);
   if (note) await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase?.id, ...note } });
+  const held = heldNote(invoice.status, updated.status, updated.status === HELD ? await heldPaymentReason(fresh) : null);
+  if (held) await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase?.id, ...held } });
+  // The client has paid: anything the agent was waiting to ask (a reminder, a plan offer) is moot while PayPal holds it.
+  if (kase && updated.status === HELD) await supersedePending(kase.id, invoice.id, "the client's payment is held by PayPal");
   if (kase && closed) {
     // A refund after payment finds the case already resolved; anything still pending is superseded either way.
     await supersedePending(kase.id, invoice.id, `the invoice is now ${updated.status.replaceAll("_", " ").toLowerCase()}`);
@@ -199,7 +236,7 @@ export async function handleWebhookEvent(event: WebhookEventBody, opts: { verifi
     update: { verified: opts.verified, note: opts.note },
   });
   if (!opts.process) return false;
-  if (!INVOICE_EVENTS.includes(event.event_type)) console.log(`[webhook] ignoring event type ${event.event_type} (${event.id}); stored, nothing to do`);
+  if (!WEBHOOK_EVENTS.includes(event.event_type)) console.log(`[webhook] ignoring event type ${event.event_type} (${event.id}); stored, nothing to do`);
   else {
     const paypalId = invoiceIdOf(event);
     const invoice = paypalId ? await db.invoice.findUnique({ where: { paypalInvoiceId: paypalId } }) : null;

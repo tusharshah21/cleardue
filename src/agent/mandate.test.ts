@@ -119,6 +119,16 @@ describe("checkAction: contact actions", () => {
       expect(checkAction({ type: "read_invoice", invoiceId: "INV2-1" }, ctx({ invoice: { ...ctx().invoice, status } })).verdict).toBe("allow");
     }
   });
+  it("denies every non-internal action while PayPal is holding the client's payment, and says why", () => {
+    const actions: AgentAction[] = [reminder(), message(), plan([50_000, 1], [50_000, 20]), { type: "pause_reminders", until: d(5) }, { type: "cancel_invoice", invoiceId: "INV2-1" }];
+    const held = ctx({ invoice: { ...ctx().invoice, status: "PAYMENT_PENDING" } });
+    for (const a of actions) {
+      const r = checkAction(a, held);
+      expect(r.verdict, a.type).toBe("deny");
+      expect(r.reasons.join(" ")).toMatch(/payment is being held by PayPal; the agent waits until PayPal completes it/);
+    }
+    expect(checkAction({ type: "read_invoice", invoiceId: "INV2-1" }, held).verdict).toBe("allow");
+  });
   it("denies actions on a different invoice, or when the invoice isn't on PayPal", () => {
     expect(checkAction(reminder({ invoiceId: "INV2-OTHER" }), ctx()).reasons).toContain("action targets a different invoice");
     const local = ctx({ invoice: { ...ctx().invoice, paypalInvoiceId: null } });

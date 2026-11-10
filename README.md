@@ -71,7 +71,7 @@ flowchart LR
 
 ![The hosted /analyst page opening on its ready-made report: collection rate, median days to paid and recovered this month as KPIs, the client and date filters, overdue by reason, and the three custom widgets](docs/screenshots/45-hosted-analyst-report.jpg)
 
-![The same report with Northwind Media clicked: every widget follows the client filter and the collection rate reads 100%](docs/screenshots/46-hosted-analyst-northwind.jpg)
+![The same report with Northwind Media clicked: every widget, the KPIs included, follows the client filter](docs/screenshots/46-hosted-analyst-northwind.jpg)
 
 `/analyst` is an [AG Studio](https://www.ag-grid.com/studio/) dashboard for the freelancer, built on the Studio Agent Framework:
 
@@ -100,14 +100,15 @@ All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other
 | `POST /v2/invoicing/invoices/{id}/cancel` | Cancel the original silently (`send_to_recipient=false`) when a plan replaces it |
 | `POST /v2/invoicing/invoices/{id}/payments` | Record a payment (mock mode's "Simulate client payment") |
 | `DELETE /v2/invoicing/invoices/{id}` | Clean up drafts when a plan aborts |
-| `POST /v1/notifications/webhooks` | Subscribe `INVOICING.INVOICE.PAID`, `UPDATED`, `CANCELLED`, `REFUNDED` |
+| `POST /v1/notifications/webhooks`, `PATCH /v1/notifications/webhooks/{id}` | Subscribe `INVOICING.INVOICE.PAID`, `UPDATED`, `CANCELLED`, `REFUNDED` and the payment's `PAYMENT.CAPTURE.PENDING`, `COMPLETED`, `DENIED` (`npm run paypal:webhook -- events` updates an existing webhook) |
+| `GET /v2/payments/captures/{id}` | Why PayPal is holding a pending payment (the reason code), shown on the invoice's timeline |
 | `POST /v1/notifications/verify-webhook-signature` | Verify every incoming event before it is processed |
 | `POST /v1/notifications/simulate-event` | Dev script to test simulator events against verification |
 | `GET /v1/reporting/transactions` | Transaction Search: *Payments received (live from PayPal)* on the dashboard and in `/analyst` |
 
 ### Payments received, live from PayPal
 
-ClearDue's own records say which invoices are paid. The *Payments received (live from PayPal)* card on the dashboard shows the other side: the money PayPal itself recorded in the last 90 days, read from Transaction Search ([transactions.ts](src/paypal/transactions.ts), [route](src/app/api/paypal/payments/route.ts)). Each payment is matched against ClearDue's invoice numbers ("invoice 0233 in ClearDue", or "not in ClearDue"), and the card says when PayPal last refreshed the data, because Transaction Search can run up to three hours behind. The same rows are a `paypalPayments` source in `/analyst`, joined to invoices by invoice number (so the client filter applies), with a *Received in PayPal* KPI.
+ClearDue's own records say which invoices are paid. The *Payments received (live from PayPal)* card on the dashboard shows the other side: the money PayPal itself recorded in the last 90 days, read from Transaction Search ([transactions.ts](src/paypal/transactions.ts), [route](src/app/api/paypal/payments/route.ts)). Each payment is matched against ClearDue's invoice numbers ("invoice in ClearDue", or "not in ClearDue"), and the card says when PayPal last refreshed the data, because Transaction Search can run up to three hours behind. The same rows are a `paypalPayments` source in `/analyst`, joined to invoices by invoice number (so the client filter applies), with a *Received in PayPal* KPI.
 
 - PayPal allows 31 days per search, so the server asks for three 30-day windows, keeps money in (refunds, fees and transfers out are left out) and caches the result for 5 minutes, using the same token cache as every other call.
 - **Off by default** (`LIVE_PAYPAL_PAYMENTS`): while it is off, the card, the `/analyst` source and KPI, and the route (a 404) are all absent, so nobody sees an access warning. Turn it on once `npx tsx scripts/paypal-app-check.mts` says the reporting scope is present.
@@ -126,6 +127,8 @@ PayPal doesn't allow partial payments on invoices from merchants in India, Brazi
 
 - `split_invoices` (IN, BR, IL): the original invoice is replaced by one PayPal invoice per instalment.
 - `partial_payment` (everyone else): one replacement invoice that accepts part payments, with the first instalment as the minimum.
+
+**Demo note.** The demo runs `split_invoices` because this PayPal account refuses partial payments, and a payment from a buyer in another country (for example a UK buyer paying a GBP invoice to an India account) can sit as *pending* at first, until the receiving account accepts it. ClearDue shows that honestly as "Payment held by PayPal" (see *When things go wrong*) and moves to Paid on its own once PayPal completes the payment. Invoice numbers and KPI figures differ on every run, so none are quoted anywhere in these docs.
 
 **Sandbox note.** The strategy is chosen from `Freelancer.country` in our database (the demo freelancer is `IN`), because PayPal's API doesn't reveal the business account's country. The current sandbox app belongs to a business account that PayPal itself treats as one of those countries: creating an invoice with `configuration.partial_payment` is refused with `400 INVALID_REQUEST` "Partial payments are not available in your country.", so the demo runs `split_invoices` against an account that really can't do `partial_payment`. (An earlier sandbox app accepted the flag, which is why the account's country is worth checking whenever the app changes: `npx tsx scripts/paypal-app-check.mts`.) The credentials come only from `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, so switching to another sandbox app is an env change.
 
@@ -268,6 +271,7 @@ PayPal is the source of truth, and things change there without ClearDue being as
 | --- | --- |
 | **Refund** (full or partial), `INVOICING.INVOICE.REFUNDED` | The invoice is re-read and becomes Refunded or Partly refunded. Any proposal still waiting is marked Superseded, the case is closed, and the timeline says "Refunded in PayPal, agent paused". A paid invoice is not polled as often as an open one, so polling also re-reads invoices paid in the last 180 days every 30 minutes: a refund is caught even if the webhook never arrives. |
 | **Cancelled from the PayPal dashboard**, `INVOICING.INVOICE.CANCELLED` | Same treatment: pending proposals superseded, case closed, timeline "Cancelled in PayPal, agent stopped". The mandate denies every action except reading the invoice and telling you once an invoice is not open (paid, cancelled or refunded), so the agent can never remind, reschedule or split it, even from an old proposal you approve later. |
+| **The buyer paid, but PayPal is holding the payment** (invoice status `PAYMENT_PENDING`; PayPal still sends `INVOICING.INVOICE.PAID`) | The invoice is **not** marked paid. The badge says "Payment held by PayPal", and the timeline says "Payment received, held by PayPal" with PayPal's reason in plain English, read from the payment itself (for example `RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION`: the receiving account's payment preferences need someone to accept the payment). Proposals still waiting are superseded, the mandate denies every action except reading the invoice (no reminders, no rescheduling), the client's pay page says "your payment has been received, please don't pay again" instead of showing a Pay button, and it is never counted overdue. When PayPal completes it, a verified `INVOICING.INVOICE.PAID` or `PAYMENT.CAPTURE.COMPLETED` webhook, or the polling backup within a few minutes, moves it to Paid ("Payment cleared"); if PayPal releases it back to unpaid, the invoice is open again and the timeline says so. |
 | **Paid outside ClearDue**, `INVOICING.INVOICE.PAID` | Marked paid, pending reminders superseded, timeline "Paid in PayPal outside ClearDue, reminders stopped". |
 | **A payment-plan part cancelled or refunded** | The plan is marked interrupted. The original invoice shows a banner and a timeline entry ("Part 2 of 2 was cancelled in PayPal"), and the other parts stay as they are. |
 | **Webhook retries** (PayPal resends for up to 3 days) | The route verifies the signature first, ignores an event id it has already processed, stores the event, answers 2xx and syncs after the response. A sync that fails leaves the event unprocessed for `/api/sync` to retry, so a slow PayPal read never becomes a 5xx and a retry storm. Unknown event types get a 2xx and a log line. |

@@ -82,7 +82,7 @@ export interface MandateResult {
   reasons: string[];
 }
 
-const OPEN = ["SENT", "UNPAID", "PARTIALLY_PAID", "SCHEDULED", "PAYMENT_PENDING"];
+const OPEN = ["SENT", "UNPAID", "PARTIALLY_PAID", "SCHEDULED"];
 const PAID = ["PAID", "MARKED_AS_PAID", "PARTIALLY_PAID"];
 const DAY = 86_400_000;
 const startOfDay = (d: Date) => Math.floor(d.getTime() / DAY);
@@ -139,8 +139,13 @@ export function checkAction(action: AgentAction, ctx: MandateContext): MandateRe
     else deny.push("case is in dispute; automation is stopped");
   }
 
+  // The client has paid and PayPal is holding the money: reminding, rescheduling or cancelling now would be wrong, so
+  // nothing runs until PayPal completes the payment (the invoice becomes paid) or releases it (open again).
+  if (invoice.status === "PAYMENT_PENDING") {
+    if (!INTERNAL.includes(action.type)) deny.push("the client's payment is being held by PayPal; the agent waits until PayPal completes it");
+  }
   // Paid, cancelled or refunded (in ClearDue or straight in PayPal): nothing to collect, so the agent does nothing.
-  if (!OPEN.includes(invoice.status) && !INTERNAL.includes(action.type)) deny.push(`invoice is ${invoice.status.replaceAll("_", " ").toLowerCase()}; the agent only acts on open invoices`);
+  else if (!OPEN.includes(invoice.status) && !INTERNAL.includes(action.type)) deny.push(`invoice is ${invoice.status.replaceAll("_", " ").toLowerCase()}; the agent only acts on open invoices`);
 
   // The agent may only touch this case's invoice.
   if ("invoiceId" in action) {

@@ -9,7 +9,7 @@ import { invoiceStatusLabel } from "@/components/status-badge";
 import { db } from "@/lib/db";
 import { fromMinor } from "@/lib/money";
 import { describeProposal, REASON_LABELS, STATUS_LABELS } from "@/lib/proposals";
-import { daysOverdue, isOpen } from "@/lib/receivables";
+import { daysOverdue, isHeld, isOpen } from "@/lib/receivables";
 import { gateContext, loadInvoice, payLink, timeline } from "./cases";
 import { checkAction, type MandateResult } from "./mandate";
 import { needsRewrite } from "@/lib/script-guard";
@@ -87,7 +87,7 @@ export async function receivablesFor(freelancerId: string, now = new Date()): Pr
         overdue: daysOverdue(i, now) > 0 ? 1 : 0,
         status: invoiceStatusLabel(i.status, daysOverdue(i, now)),
         reason: isPart ? "Payment plan" : i.case?.reason ? (REASON_LABELS[i.case.reason] ?? i.case.reason) : "Not diagnosed",
-        nextAction: isPart ? (daysOverdue(i, now) > 0 ? "Plan part is overdue: remind the client" : "Waiting for the due date") : pending ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}` : i.case?.reason ? "Waiting on the client" : "Run Diagnose now",
+        nextAction: isHeld(i) ? "Payment held by PayPal, waiting for it to clear" : isPart ? (daysOverdue(i, now) > 0 ? "Plan part is overdue: remind the client" : "Waiting for the due date") : pending ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}` : i.case?.reason ? "Waiting on the client" : "Run Diagnose now",
       };
     })
     .sort((a, b) => b.daysOverdue - a.daysOverdue);

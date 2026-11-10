@@ -4,7 +4,7 @@
 import "dotenv/config";
 import { PayPalError, paypalRequest } from "../src/paypal/client";
 import { createDraftInvoice, deleteDraftInvoice, getInvoice, updateDraftInvoice } from "../src/paypal/invoices";
-import { INVOICE_EVENTS } from "../src/paypal/webhooks";
+import { WEBHOOK_EVENTS } from "../src/paypal/webhooks";
 
 const show = (e: unknown) => (e instanceof PayPalError ? `${e.status} ${e.paypalName ?? ""} debug_id=${e.debugId ?? "-"} ${JSON.stringify(e.details ?? "")}` : String(e));
 const hosted = (process.argv[2] ?? process.env.APP_URL ?? "").replace(/\/$/, "");
@@ -15,7 +15,7 @@ const mine = hooks.webhooks.find((w) => w.id === process.env.PAYPAL_WEBHOOK_ID);
 console.log(`webhooks on this app: ${hooks.webhooks.length}; PAYPAL_WEBHOOK_ID matches one: ${!!mine}`);
 for (const w of hooks.webhooks) {
   const names = w.event_types.map((t) => t.name);
-  console.log(`- ${w.url}  events: ${names.join(", ")}  missing: ${INVOICE_EVENTS.filter((n) => !names.includes(n) && !names.includes("*")).join(", ") || "none"}${w.id === process.env.PAYPAL_WEBHOOK_ID ? "  (this is PAYPAL_WEBHOOK_ID)" : ""}`);
+  console.log(`- ${w.url}  events: ${names.join(", ")}  missing: ${WEBHOOK_EVENTS.filter((n) => !names.includes(n) && !names.includes("*")).join(", ") || "none"}${w.id === process.env.PAYPAL_WEBHOOK_ID ? "  (this is PAYPAL_WEBHOOK_ID)" : ""}`);
 }
 try {
   const events = await paypalRequest<{ events: { event_type: string; create_time: string }[] }>("/v1/notifications/webhooks-events?page_size=20");

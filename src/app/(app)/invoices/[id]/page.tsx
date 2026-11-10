@@ -11,7 +11,7 @@ import { requireFreelancer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { REASON_LABELS } from "@/lib/proposals";
-import { daysOverdue, isOpen } from "@/lib/receivables";
+import { daysOverdue, isHeld, isOpen } from "@/lib/receivables";
 import type { LineItem } from "@/paypal/invoices";
 import { ACME_EXTRA } from "@/ai/demo-fixtures";
 import { isDemoMode } from "@/ai/provider";
@@ -50,6 +50,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
     REFUNDED: "Refunded in PayPal. The agent is paused on this invoice.",
     PARTIALLY_REFUNDED: "Partly refunded in PayPal. The agent is paused on this invoice.",
     MARKED_AS_REFUNDED: "Refunded in PayPal. The agent is paused on this invoice.",
+    PAYMENT_PENDING: "Payment received, held by PayPal. The agent is paused on this invoice (no reminders, no rescheduling) until PayPal completes it. The timeline says why PayPal is holding it.",
   };
 
   return (
@@ -119,13 +120,13 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
               }}
             />
           ))}
-          {open && kase?.state !== "dispute" ? (
+          {open && !isHeld(invoice) && kase?.state !== "dispute" ? (
             <div className="space-y-3 border-t pt-4">
               <div data-tour="diagnose-button"><DiagnosePanel invoiceId={invoice.id} analyzeLabel={daysOverdue(invoice) > 0 ? (kase ? "Re-run diagnosis" : "Diagnose now") : undefined} /></div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {open ? "Automation is stopped while this is in dispute. Reply to the client yourself." : (closedText[invoice.status] ?? "Nothing left to collect on this invoice.")}
+              {isHeld(invoice) ? closedText.PAYMENT_PENDING : open ? "Automation is stopped while this is in dispute. Reply to the client yourself." : (closedText[invoice.status] ?? "Nothing left to collect on this invoice.")}
             </p>
           )}
         </CardContent>
