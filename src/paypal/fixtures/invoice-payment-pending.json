@@ -1,0 +1,22 @@
+{
+  "_about": "Recorded from the sandbox on 2026-11-10 (GET /v2/invoicing/invoices/{id}) for an invoice a buyer had paid while the receiving account's preferences held the payment. Names, emails and ids replaced with fictional ones; statuses, shapes and amounts are as PayPal returned them.",
+  "id": "INV2-5U8W-GKP5-C8M5-M58R",
+  "status": "PAYMENT_PENDING",
+  "detail": { "invoice_number": "0013", "currency_code": "GBP", "metadata": { "recipient_view_url": "https://www.sandbox.paypal.com/invoice/p/#EXAMPLE" } },
+  "amount": { "currency_code": "GBP", "value": "900.00" },
+  "due_amount": { "currency_code": "GBP", "value": "900.00" },
+  "payments": {
+    "transactions": [
+      {
+        "type": "PAYPAL",
+        "payment_id": "12Y361605S103763T",
+        "transaction_type": "SALE",
+        "payment_date": "2026-11-10",
+        "payment_date_time": "2026-11-10T01:32:20Z",
+        "method": "PAYPAL",
+        "amount": { "currency_code": "GBP", "value": "900.00" },
+        "transaction_status": "PENDING"
+      }
+    ]
+  }
+}

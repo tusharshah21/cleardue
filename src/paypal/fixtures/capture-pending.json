@@ -1,0 +1,13 @@
+{
+  "_about": "Recorded from the sandbox on 2026-11-10 (GET /v2/payments/captures/{id}) for the payment behind invoice-payment-pending.json. Payee details and the order id replaced with fictional ones.",
+  "id": "12Y361605S103763T",
+  "amount": { "currency_code": "GBP", "value": "900.00" },
+  "final_capture": true,
+  "seller_protection": { "status": "ELIGIBLE", "dispute_categories": ["ITEM_NOT_RECEIVED", "UNAUTHORIZED_TRANSACTION"] },
+  "invoice_id": "INV2-5U8W-GKP5-C8M5-M58R",
+  "status": "PENDING",
+  "status_details": { "reason": "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION" },
+  "supplementary_data": { "related_ids": { "order_id": "EXAMPLEORDER0001" } },
+  "create_time": "2026-11-10T09:32:20Z",
+  "update_time": "2026-11-10T09:32:20Z"
+}

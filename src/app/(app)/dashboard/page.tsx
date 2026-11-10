@@ -9,7 +9,7 @@ import { formatMoney } from "@/lib/money";
 import ProgressMetricCard from "@/components/ui/progress-metric-card";
 import { dueAheadSeries, netChange, openCountSeries, overdueCountSeries } from "@/lib/dashboard-series";
 import { describeProposal, REASON_LABELS } from "@/lib/proposals";
-import { daysOverdue, isOpen, outstanding, sumByCurrency } from "@/lib/receivables";
+import { daysOverdue, isHeld, isOpen, outstanding, sumByCurrency } from "@/lib/receivables";
 import { livePaymentsEnabled, paymentsReceived } from "@/paypal/transactions";
 import { retryPendingPlans } from "@/plans/accept";
 import { PaymentsReceived } from "./payments-received";
@@ -56,8 +56,10 @@ export default async function DashboardPage() {
       ? "Reply to the client's pay-page message"
       : pending
         ? `Approve: ${describeProposal(pending.type, pending.params as Record<string, unknown>).title}`
-        : i.status === "DRAFT"
-          ? "Send the draft"
+        : isHeld(i)
+          ? "Payment held by PayPal: waiting for it to clear"
+          : i.status === "DRAFT"
+            ? "Send the draft"
           : !isOpen(i)
             ? "—"
             : i.case?.state === "dispute"
