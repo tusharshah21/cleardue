@@ -43,6 +43,12 @@ describe("Mark as paid (sandbox test)", () => {
     expect(sync).toHaveBeenCalledWith(open, "sandbox test payment");
   });
 
+  it("refuses an invoice PayPal is already holding a payment on, without recording a second one", async () => {
+    db.invoice.findUnique.mockImplementation(async () => ({ ...open, status: "PAYMENT_PENDING" }));
+    await expect(markPaidSandbox("tok", "i1")).rejects.toThrow(/already holding a payment/);
+    expect(paypal.recordPayment).not.toHaveBeenCalled();
+  });
+
   it("refuses outside the sandbox without touching PayPal", async () => {
     vi.stubEnv("PAYPAL_MODE", "mock");
     await expect(markPaidSandbox("tok", "i1")).rejects.toThrow(/sandbox/i);

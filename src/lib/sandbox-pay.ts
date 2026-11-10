@@ -2,7 +2,7 @@
 // payment on the PayPal sandbox invoice through the Invoicing API; PayPal then sends its normal signed webhook, which
 // the verified-webhook route processes. Never available in mock mode or against anything but the sandbox host.
 import { db } from "@/lib/db";
-import { isOpen } from "@/lib/receivables";
+import { isHeld, isOpen } from "@/lib/receivables";
 import { syncInvoice } from "@/lib/invoicing";
 import { config, paypalMode } from "@/paypal/client";
 import { getInvoice, recordPayment } from "@/paypal/invoices";
@@ -25,6 +25,8 @@ export async function markPaidSandbox(payToken: string, targetId: string) {
   if (targetId !== main.id && !plan?.invoices.some((p) => p.id === targetId)) throw new Error("Invoice not found.");
   const target = await db.invoice.findUnique({ where: { id: targetId } });
   if (!target?.paypalInvoiceId || !isOpen(target)) throw new Error("This invoice has nothing left to pay.");
+  // The pay page hides the button here; refuse the action too, so a held payment is never recorded a second time.
+  if (isHeld(target)) throw new Error("PayPal is already holding a payment on this invoice.");
   const fresh = await getInvoice(target.paypalInvoiceId);
   if (!fresh.due_amount || Number(fresh.due_amount.value) <= 0) throw new Error(`Nothing due: invoice is ${fresh.status}.`);
   await recordPayment(target.paypalInvoiceId, {

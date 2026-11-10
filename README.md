@@ -278,6 +278,8 @@ PayPal is the source of truth, and things change there without ClearDue being as
 | **Access token expiry** | The OAuth token is cached for its lifetime (about 9 hours) minus a minute. A 401 clears it and the request is retried once with a fresh token; a second 401 is reported, not retried. |
 | **Any PayPal error** | The server log gets one line with the status, PayPal's error name, the issue codes and the `debug_id` (never the token or a request body). You see a plain sentence, for example "PayPal only sends reminders for invoices that have been sent and are still unpaid. Press Sync to see the invoice's current state. (PayPal reference f34268289bfd1)". |
 
+Cross-border payments to an India account can be held or left unclaimed by PayPal for manual acceptance; ClearDue shows them as held and pauses the agent until PayPal completes or denies them. In this sandbox the hold never cleared, even after the payment was accepted and the receiving preference was changed, so the Paid-after-hold path is covered by tests and not by a real payment.
+
 **Debugging with the PayPal sandbox dashboard** ([developer.paypal.com](https://developer.paypal.com/dashboard/), sandbox):
 
 - **API calls and error logs:** the dashboard's event logs list the app's API requests with their status, including failed ones with the error name. Search by the `debug_id` from ClearDue's log line or timeline; PayPal support asks for it too.
