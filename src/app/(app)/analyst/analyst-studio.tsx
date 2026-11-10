@@ -6,6 +6,7 @@ import { Component, useEffect, useMemo, useState, useSyncExternalStore, type Rea
 import { AgStudioAiModule, clientToolRunner, createAiHarness, studioTheme, type AgAiEvent, type AgAiRunInput, type AgDataSourcesDefinition, type AgReportState, type AgStudioApi } from "ag-studio";
 import { AgStudio, AgStudioProvider, createWidgets } from "ag-studio-react";
 import type { ClientRow, DecisionRow, InvoiceRow, PlanPartRow, ReceivableRow } from "@/agent/analyst";
+import type { PaymentRow } from "@/paypal/transactions";
 import { CUSTOM_WIDGETS } from "./widgets";
 
 const PAGE = "analyst";
@@ -47,10 +48,10 @@ const title = (text: string, subtitle: string) => ({ title: { enabled: true, tex
 
 const kpi = (text: string, subtitle: string) => ({ ...title(text, subtitle), style: { typography: { fontSize: 34, fontWeight: "bold" }, verticalAlign: "center" } });
 
-/** The report Studio opens with, so nobody starts on an empty canvas: three KPIs (collection rate, median days to paid,
- * recovered this month), a client picker and a date range that filter every widget, overdue invoices by reason, and
+/** The report Studio opens with, so nobody starts on an empty canvas: four KPIs (collection rate, median days to paid,
+ * recovered this month, and payments received as PayPal itself records them), a client picker and a date range that filter every widget, overdue invoices by reason, and
  * the three ClearDue widgets. Laid out on the 24-column canvas, stacked on a phone. */
-const initialStateFor = (narrow: boolean) => ({
+const initialStateFor = (narrow: boolean, live: boolean) => ({
   selectedPageId: PAGE,
   pages: [
     {
@@ -59,6 +60,7 @@ const initialStateFor = (narrow: boolean) => ({
         collectionRate: { type: "value", dataMapping: { value: [{ id: "collectionRate" }] }, format: kpi("Collection rate", "Paid invoices ÷ issued invoices") },
         medianDays: { type: "median-days", dataMapping: { fields: fieldsOf("invoices", ["invoice", "daysToPaid"]) }, format: title("Median days to paid", "From issue date to payment") },
         recovered: { type: "value", dataMapping: { value: [{ id: "invoices.recoveredThisMonth", aggregation: "sum" }] }, format: kpi("Recovered this month", "Overdue invoices paid since the 1st") },
+        ...(live && { paypalReceived: { type: "value", dataMapping: { value: [{ id: "paypalPayments.count", aggregation: "sum" }] }, format: kpi("Received in PayPal", "Payments in the last 90 days, live from PayPal") } }),
         period: { type: "date-filter", dataMapping: { value: [{ id: "invoices.issued" }] }, format: { ...title("Issued between", "Set both dates; every widget follows"), style: { filterType: "between" } } },
         clientFilter: { type: "button-filter", dataMapping: { value: [{ id: "clients.client" }] }, format: { ...title("Client", "Click one to filter the whole page"), style: { selection: { type: "single" }, defaultItem: { backgroundColor: "#ffffff", color: "#0a0a0a" }, activeItem: { backgroundColor: "#1f3fff", color: "#ffffff" } } } },
         overdueByReason: { type: "bar-chart-grouped", dataMapping: { categoryKey: [{ id: "receivables.reason" }], valueKey: [{ id: "receivables.overdue", aggregation: "sum" }] }, format: title("Overdue by reason", "Overdue invoices, by the diagnosed reason") },
@@ -67,21 +69,35 @@ const initialStateFor = (narrow: boolean) => ({
         plans: { type: "plans", dataMapping: { fields: fieldsOf("plans", ["client", "plan", "strategy", "part", "amount", "currency", "due", "status", "paid"]) }, format: title("Plan tracker", "Instalments paid and still to pay") },
       },
       widgetLayout: narrow
-        ? {
-            collectionRate: { xTrack: 0, yTrack: 0, xSpan: 12, ySpan: 8 },
-            medianDays: { xTrack: 12, yTrack: 0, xSpan: 12, ySpan: 8 },
-            recovered: { xTrack: 0, yTrack: 8, xSpan: 12, ySpan: 8 },
-            clientFilter: { xTrack: 12, yTrack: 8, xSpan: 12, ySpan: 8 },
-            period: { xTrack: 0, yTrack: 16, xSpan: 24, ySpan: 8 },
-            overdueByReason: { xTrack: 0, yTrack: 22, xSpan: 24, ySpan: 14 },
-            owes: { xTrack: 0, yTrack: 36, xSpan: 24, ySpan: 20 },
-            decisions: { xTrack: 0, yTrack: 56, xSpan: 24, ySpan: 30 },
-            plans: { xTrack: 0, yTrack: 86, xSpan: 24, ySpan: 24 },
-          }
+        ? live
+          ? {
+              collectionRate: { xTrack: 0, yTrack: 0, xSpan: 12, ySpan: 8 },
+              medianDays: { xTrack: 12, yTrack: 0, xSpan: 12, ySpan: 8 },
+              recovered: { xTrack: 0, yTrack: 8, xSpan: 12, ySpan: 8 },
+              paypalReceived: { xTrack: 12, yTrack: 8, xSpan: 12, ySpan: 8 },
+              clientFilter: { xTrack: 0, yTrack: 16, xSpan: 24, ySpan: 8 },
+              period: { xTrack: 0, yTrack: 24, xSpan: 24, ySpan: 8 },
+              overdueByReason: { xTrack: 0, yTrack: 32, xSpan: 24, ySpan: 14 },
+              owes: { xTrack: 0, yTrack: 46, xSpan: 24, ySpan: 20 },
+              decisions: { xTrack: 0, yTrack: 66, xSpan: 24, ySpan: 30 },
+              plans: { xTrack: 0, yTrack: 96, xSpan: 24, ySpan: 24 },
+            }
+          : {
+              collectionRate: { xTrack: 0, yTrack: 0, xSpan: 12, ySpan: 8 },
+              medianDays: { xTrack: 12, yTrack: 0, xSpan: 12, ySpan: 8 },
+              recovered: { xTrack: 0, yTrack: 8, xSpan: 12, ySpan: 8 },
+              clientFilter: { xTrack: 12, yTrack: 8, xSpan: 12, ySpan: 8 },
+              period: { xTrack: 0, yTrack: 16, xSpan: 24, ySpan: 8 },
+              overdueByReason: { xTrack: 0, yTrack: 22, xSpan: 24, ySpan: 14 },
+              owes: { xTrack: 0, yTrack: 36, xSpan: 24, ySpan: 20 },
+              decisions: { xTrack: 0, yTrack: 56, xSpan: 24, ySpan: 30 },
+              plans: { xTrack: 0, yTrack: 86, xSpan: 24, ySpan: 24 },
+            }
         : {
-            collectionRate: { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 8 },
-            medianDays: { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 8 },
-            recovered: { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 8 },
+            collectionRate: { xTrack: 0, yTrack: 0, xSpan: live ? 6 : 8, ySpan: 8 },
+            medianDays: { xTrack: live ? 6 : 8, yTrack: 0, xSpan: live ? 6 : 8, ySpan: 8 },
+            recovered: { xTrack: live ? 12 : 16, yTrack: 0, xSpan: live ? 6 : 8, ySpan: 8 },
+            ...(live && { paypalReceived: { xTrack: 18, yTrack: 0, xSpan: 6, ySpan: 8 } }),
             clientFilter: { xTrack: 0, yTrack: 8, xSpan: 6, ySpan: 12 },
             period: { xTrack: 0, yTrack: 20, xSpan: 6, ySpan: 10 },
             overdueByReason: { xTrack: 6, yTrack: 8, xSpan: 18, ySpan: 22 },
@@ -150,6 +166,9 @@ interface Props {
   receivables: ReceivableRow[];
   decisions: DecisionRow[];
   plans: PlanPartRow[];
+  /** Live from PayPal Transaction Search (empty when that call failed; the page says why), or null when
+   * LIVE_PAYPAL_PAYMENTS is off: then there is no source, KPI or relationship at all. */
+  payments: PaymentRow[] | null;
 }
 
 /** Studio's widgets carry no stable id in the DOM, so the tour's target (data-tour="collection-rate") is put on the
@@ -167,13 +186,13 @@ function useTourTarget() {
   }, []);
 }
 
-export function AnalystStudio({ licenseKey, clients, invoices, receivables, decisions, plans }: Props) {
+export function AnalystStudio({ licenseKey, clients, invoices, receivables, decisions, plans, payments }: Props) {
   useTourTarget();
   const data = useMemo<AgDataSourcesDefinition>(
     () =>
       ({
         description:
-          "A freelancer's receivables. invoices is the hub: receivables, decisions and plans join to it by invoiceId, and clients join to it by clientId, so a client or date filter narrows every table. Amounts are in each invoice's own currency and are never summed across currencies.",
+          `A freelancer's receivables. invoices is the hub: receivables, decisions and plans join to it by invoiceId, and clients join to it by clientId, so a client or date filter narrows every table.${payments ? " paypalPayments is different: it comes live from PayPal's Transaction Search (the last 90 days of money received), not from ClearDue's records, and joins to invoices by invoice number." : ""} Amounts are in each invoice's own currency and are never summed across currencies.`,
         sources: [
           {
             id: "clients",
@@ -249,9 +268,27 @@ export function AnalystStudio({ licenseKey, clients, invoices, receivables, deci
               { id: "paid", name: "Paid", format: int },
             ],
           },
+          ...(payments ? [{
+            id: "paypalPayments",
+            description: "Payments received in the last 90 days, live from PayPal Transaction Search (not ClearDue's records). PayPal can run up to three hours behind. invoiceNumber is empty when the payment wasn't for an invoice.",
+            // Studio infers types from the first values, so missing text is "" rather than null.
+            data: payments.map((r) => ({ ...r, invoiceNumber: r.invoiceNumber ?? "", payer: r.payer ?? "", date: r.date.slice(0, 10), count: 1 })),
+            fields: [
+              { id: "id", name: "PayPal transaction id", format: text, hide: true },
+              { id: "date", name: "Received (PayPal)", format: text },
+              { id: "payer", name: "Payer (PayPal)", format: text },
+              { id: "invoiceNumber", name: "Invoice number (PayPal)", format: text },
+              { id: "amount", name: "Amount received (PayPal)", format: dec },
+              { id: "currency", name: "Currency (PayPal)", format: text },
+              { id: "status", name: "Payment status (PayPal)", format: text },
+              { id: "count", name: "Payments (PayPal)", format: int },
+              { id: "amountMinor", name: "Amount in minor units", format: int, hide: true },
+            ],
+          }] : []),
         ],
         // A star around invoices, so every widget is reachable from a client or a date by exactly one path.
         relationships: [
+          ...(payments ? [{ id: "invoice-paypal-payments", source: { tableId: "invoices", fieldId: "invoice" }, target: { tableId: "paypalPayments", fieldId: "invoiceNumber" }, type: "one-to-many" as const }] : []),
           { id: "client-invoices", source: { tableId: "clients", fieldId: "clientId" }, target: { tableId: "invoices", fieldId: "clientId" }, type: "one-to-many" },
           { id: "invoice-receivable", source: { tableId: "invoices", fieldId: "invoiceId" }, target: { tableId: "receivables", fieldId: "invoiceId" }, type: "one-to-one" },
           { id: "invoice-decisions", source: { tableId: "invoices", fieldId: "invoiceId" }, target: { tableId: "decisions", fieldId: "invoiceId" }, type: "one-to-many" },
@@ -268,7 +305,7 @@ export function AnalystStudio({ licenseKey, clients, invoices, receivables, deci
           },
         ],
       }) as unknown as AgDataSourcesDefinition,
-    [clients, invoices, receivables, decisions, plans],
+    [clients, invoices, receivables, decisions, plans, payments],
   );
 
   // The widget editor is hidden until asked for, so the report gets the room; the AI panel is always there.
@@ -276,7 +313,7 @@ export function AnalystStudio({ licenseKey, clients, invoices, receivables, deci
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
   const narrow = useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW).matches, () => false);
-  const [initialState] = useState(() => initialStateFor(typeof window !== "undefined" && window.matchMedia(NARROW).matches));
+  const [initialState] = useState(() => initialStateFor(typeof window !== "undefined" && window.matchMedia(NARROW).matches, payments !== null));
   const panels = useMemo(() => ({ edit: { left: !narrow || asking ? ["ai"] : [], right: editing && !narrow ? ["edit"] : [] } }), [editing, narrow, asking]);
 
   const ai = useMemo(

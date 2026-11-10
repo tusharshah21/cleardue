@@ -1,0 +1,44 @@
+{
+  "transaction_details": [
+    {
+      "transaction_info": {
+        "paypal_account_id": "EXAMPLEACCT1",
+        "transaction_id": "5TY05013RG002845M",
+        "transaction_event_code": "T0007",
+        "transaction_initiation_date": "2026-11-02T10:15:03+0000",
+        "transaction_updated_date": "2026-11-02T10:15:03+0000",
+        "transaction_amount": { "currency_code": "USD", "value": "2400.00" },
+        "fee_amount": { "currency_code": "USD", "value": "-84.10" },
+        "transaction_status": "S",
+        "invoice_id": "0233"
+      },
+      "payer_info": { "account_id": "EXAMPLEPAYER1", "email_address": "payer@example.com", "payer_name": { "given_name": "Example", "surname": "Payer", "alternate_full_name": "Example Payer" }, "country_code": "US" }
+    },
+    {
+      "transaction_info": {
+        "transaction_id": "1FN09943UY4423436",
+        "transaction_event_code": "T0007",
+        "transaction_initiation_date": "2026-10-20T08:00:00+0000",
+        "transaction_amount": { "currency_code": "GBP", "value": "900.00" },
+        "transaction_status": "P"
+      },
+      "payer_info": { "payer_name": { "given_name": "Second", "surname": "Example" } }
+    },
+    {
+      "transaction_info": {
+        "transaction_id": "8AB12345CD6789012",
+        "transaction_event_code": "T0400",
+        "transaction_initiation_date": "2026-10-25T09:00:00+0000",
+        "transaction_amount": { "currency_code": "USD", "value": "-500.00" },
+        "transaction_status": "S"
+      }
+    }
+  ],
+  "account_number": "EXAMPLEACCT1",
+  "start_date": "2026-10-10T11:00:00+0000",
+  "end_date": "2026-11-09T11:00:00+0000",
+  "last_refreshed_datetime": "2026-11-09T08:59:59+0000",
+  "page": 1,
+  "total_items": 3,
+  "total_pages": 1
+}

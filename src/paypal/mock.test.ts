@@ -7,6 +7,7 @@ import { executePlan, replacementDrafts } from "@/plans/plans";
 import { paypalMode, PayPalError } from "./client";
 import * as paypal from "./invoices";
 import { mockInvoice, resetMock } from "./mock";
+import { paymentsReceived, resetPaymentsCache } from "./transactions";
 
 const input = {
   currency: "GBP",
@@ -66,6 +67,15 @@ describe("PayPal mock", () => {
     await expect(paypal.cancelInvoice(id, { sendToRecipient: false })).rejects.toThrow(/status CANCELLED/);
     const err = (await paypal.getInvoice("INV2-NOPE").catch((e) => e)) as PayPalError;
     expect(err.status).toBe(404);
+  });
+
+  it("lists recorded payments through Transaction Search", async () => {
+    resetPaymentsCache();
+    const id = await sent();
+    await paypal.recordPayment(id, { amount: { currency_code: "GBP", value: "1800.00" }, method: "PAYPAL", payment_date: "2026-11-02" });
+    const r = await paymentsReceived();
+    expect(r).toMatchObject({ ok: true, rows: [{ amount: 1800, currency: "GBP", status: "Completed", invoiceNumber: mockInvoice(id)?.detail.invoice_number }] });
+    expect(r.rows).toHaveLength(1);
   });
 
   it("refuses partial payments for an Indian merchant and allows them elsewhere", async () => {
