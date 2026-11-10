@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTokenCache } from "./client";
 import sample from "./fixtures/transaction-search.json";
-import { paymentsReceived, resetPaymentsCache, toPaymentRows } from "./transactions";
+import { livePaymentsEnabled, paymentsReceived, resetPaymentsCache, toPaymentRows } from "./transactions";
 
 // The sample has PayPal's documented response shape with fictional data: an invoice payment, a pending payment with no
 // invoice, and an outgoing transfer (negative) that must be left out.
@@ -33,6 +33,14 @@ afterEach(() => {
 });
 
 describe("Payments received (Transaction Search)", () => {
+  it("is off unless LIVE_PAYPAL_PAYMENTS is exactly true", () => {
+    expect(livePaymentsEnabled()).toBe(false);
+    vi.stubEnv("LIVE_PAYPAL_PAYMENTS", "1");
+    expect(livePaymentsEnabled()).toBe(false);
+    vi.stubEnv("LIVE_PAYPAL_PAYMENTS", "true");
+    expect(livePaymentsEnabled()).toBe(true);
+  });
+
   it("keeps money in only, with status, invoice number and payer", () => {
     expect(toPaymentRows(sample)).toEqual([
       { id: "5TY05013RG002845M", date: "2026-11-02T10:15:03.000Z", amount: 2400, amountMinor: 240000, currency: "USD", status: "Completed", invoiceNumber: "0233", payer: "Example Payer" },

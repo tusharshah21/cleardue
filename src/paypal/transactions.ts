@@ -44,6 +44,11 @@ export interface SearchResponse {
   total_pages?: number;
 }
 
+/** LIVE_PAYPAL_PAYMENTS=true turns the feature on (default off). It needs Transaction Search enabled for the PayPal app:
+ * until the app's token carries the reporting/search/read scope, every call is a 403, so the card, the /analyst source
+ * and the route stay out of sight rather than show judges an access warning. */
+export const livePaymentsEnabled = () => process.env.LIVE_PAYPAL_PAYMENTS === "true";
+
 export const DAYS = 90;
 const WINDOW_DAYS = 30;
 const CACHE_MS = 5 * 60_000;

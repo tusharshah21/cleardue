@@ -110,6 +110,7 @@ All calls go to `https://api-m.sandbox.paypal.com`; the client refuses any other
 ClearDue's own records say which invoices are paid. The *Payments received (live from PayPal)* card on the dashboard shows the other side: the money PayPal itself recorded in the last 90 days, read from Transaction Search ([transactions.ts](src/paypal/transactions.ts), [route](src/app/api/paypal/payments/route.ts)). Each payment is matched against ClearDue's invoice numbers ("invoice 0233 in ClearDue", or "not in ClearDue"), and the card says when PayPal last refreshed the data, because Transaction Search can run up to three hours behind. The same rows are a `paypalPayments` source in `/analyst`, joined to invoices by invoice number (so the client filter applies), with a *Received in PayPal* KPI.
 
 - PayPal allows 31 days per search, so the server asks for three 30-day windows, keeps money in (refunds, fees and transfers out are left out) and caches the result for 5 minutes, using the same token cache as every other call.
+- **Off by default** (`LIVE_PAYPAL_PAYMENTS`): while it is off, the card, the `/analyst` source and KPI, and the route (a 404) are all absent, so nobody sees an access warning. Turn it on once `npx tsx scripts/paypal-app-check.mts` says the reporting scope is present.
 - If the call fails, the card and `/analyst` show a plain sentence instead (a `403` means the app lacks the Transaction Search permission, which is different from bad credentials) and the rest of the page is unaffected. Tested for success, no payments and errors ([tests](src/paypal/transactions.test.ts)).
 - Transaction Search has to be enabled for the REST app in the PayPal developer dashboard, and the permission only appears in a newly issued token.
 
@@ -126,7 +127,7 @@ PayPal doesn't allow partial payments on invoices from merchants in India, Brazi
 - `split_invoices` (IN, BR, IL): the original invoice is replaced by one PayPal invoice per instalment.
 - `partial_payment` (everyone else): one replacement invoice that accepts part payments, with the first instalment as the minimum.
 
-**Sandbox note.** The sandbox REST app the current build was tested with is not India-registered: PayPal accepted `configuration.partial_payment` on it and kept the flag, and its API doesn't reveal the business account's country. So the strategy is chosen from `Freelancer.country` in our database (the demo freelancer is `IN`), not from the PayPal account, and the demo exercises `split_invoices` against an account that could also do `partial_payment`. The credentials come only from `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, so switching to another sandbox app is an env change.
+**Sandbox note.** The strategy is chosen from `Freelancer.country` in our database (the demo freelancer is `IN`), because PayPal's API doesn't reveal the business account's country. The current sandbox app belongs to a business account that PayPal itself treats as one of those countries: creating an invoice with `configuration.partial_payment` is refused with `400 INVALID_REQUEST` "Partial payments are not available in your country.", so the demo runs `split_invoices` against an account that really can't do `partial_payment`. (An earlier sandbox app accepted the flag, which is why the account's country is worth checking whenever the app changes: `npx tsx scripts/paypal-app-check.mts`.) The credentials come only from `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, so switching to another sandbox app is an env change.
 
 Either way the client always has something payable: the new drafts are created first, the original is re-read and only cancelled if it is still unpaid (silently), then the drafts are sent. If a send fails after the cancel, the plan stays `pending_send` and polling retries it. Amounts are integer minor units everywhere, and plans always sum exactly.
 
@@ -319,7 +320,8 @@ See [.env.example](.env.example). Never commit `.env`.
 | `ALLOW_MOCK_IN_PROD` | `true` lets mock mode run in production for a deploy check, with the banner shown. Leave unset for the real deploy |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox REST app credentials |
 | `PAYPAL_BASE_URL` | Must be `https://api-m.sandbox.paypal.com` |
-| `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature |
+| `PAYPAL_WEBHOOK_ID` | Webhook ID used by verify-webhook-signature. A webhook belongs to one PayPal app, so changing the app means creating a new webhook (`npm run paypal:webhook -- create <url>`) and a new ID |
+| `LIVE_PAYPAL_PAYMENTS` | `true` shows *Payments received (live from PayPal)* on the dashboard and in `/analyst`. Default off: it needs Transaction Search enabled for the PayPal app, and until the app's token carries the `reporting/search/read` scope every call is a 403 |
 | `ALLOW_UNVERIFIED_WEBHOOKS` | Dev only: process events that fail verification (PayPal's simulator). Ignored when `NODE_ENV=production` |
 | `AI_PROVIDER`, `AI_MODEL` | The primary provider (`openai`, `google` or `anthropic`) and its model, e.g. `openai` and `gpt-5.4-mini`; never hard-coded |
 | `AI_FALLBACK_PROVIDER`, `AI_FALLBACK_MODEL` | Optional secondary, e.g. `google` and `gemini-3.5-flash-lite`: takes over once per request on a quota error, a 5xx, a rejected key or a missing key on the primary |

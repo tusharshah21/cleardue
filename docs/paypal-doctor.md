@@ -1,6 +1,6 @@
 # PayPal checks (doctor summary)
 
-Run on 2026-11-09 on the `hardening-webinar` branch. No secrets, tokens or webhook ids appear here.
+First run on 2026-11-09 on the `hardening-webinar` branch; the app-specific sections were re-run on 2026-11-10 after the project moved to a new sandbox app. No secrets or tokens appear here.
 
 ## How these checks were run
 
@@ -21,10 +21,11 @@ The brief asked for the PayPal AI Toolkit's `/paypal:doctor` (whole repo, then s
 
 ## Symptom: "webhooks not being received"
 
-- The sandbox app has one webhook, for `https://cleardue-6laj.onrender.com/api/webhooks/paypal`, subscribed to all four invoice events (PAID, UPDATED, CANCELLED, REFUNDED). None missing.
+- **After the move to a new sandbox app (2026-11-10):** a webhook belongs to one app, so the new app started with none. One was created for `https://cleardue-6laj.onrender.com/api/webhooks/paypal` with the four invoice events ClearDue handles (PAID, UPDATED, CANCELLED, REFUNDED), its id went into the local `.env` and the Render web service, and [scripts/paypal-app-check.mts](../scripts/paypal-app-check.mts) confirms the local id matches a registered webhook.
+- Before the move, the sandbox app had one webhook, for the same URL, subscribed to the same four events. None missing.
 - PayPal generated events for it today (the 03:01 UTC demo reset: CANCELLED and PAID), and the hosted invoice pages show those deliveries as **verified, processed**. So production receives and verifies webhooks.
 - The hosted route answers an empty POST with 400, so it is up and refuses non-events.
-- **Finding, not fixed:** the `PAYPAL_WEBHOOK_ID` in the local `.env` does not match the registered webhook. Production is unaffected (Render has the right id, as the verified deliveries show), but a local server with a public tunnel would reject every delivery. Fix by copying the id from the developer dashboard into the local `.env`; this work does not edit secrets.
+- **Finding, now fixed:** the `PAYPAL_WEBHOOK_ID` in the local `.env` did not match the registered webhook, so a local server with a public tunnel would have rejected every delivery. The new app's webhook id is in the local `.env` and the check above passes.
 
 ## Symptom: "invoice update rejected"
 
@@ -40,6 +41,11 @@ The brief asked for the PayPal AI Toolkit's `/paypal:doctor` (whole repo, then s
 
 ## Chosen not to fix
 
-- Local `PAYPAL_WEBHOOK_ID` mismatch: a secret in a developer's `.env`, see above.
 - Negative testing on the Invoicing API: not supported by this sandbox app, see above.
-- Transaction Search returned `403 NOT_AUTHORIZED` (debug_id f502610f2fe1b): it is not enabled for the sandbox app, so no live payments source was built. Enable it in the developer dashboard (it can take 10 to 15 minutes to apply).
+- Transaction Search: still `403 NOT_AUTHORIZED` on the new app (debug_id f6086178b2d96, 2026-11-10), and a fresh token has 29 scopes, none of them `reporting/search/read`, even though the feature is ticked in the app's settings. The code is built and tested ([src/paypal/transactions.ts](../src/paypal/transactions.ts)) but ships switched off (`LIVE_PAYPAL_PAYMENTS`, default off), so nobody sees an access warning. PayPal caches tokens for about 9 hours and community reports say a newly added permission can take that long, or need an app created with the box already ticked, to appear. Re-run `npx tsx scripts/paypal-app-check.mts`; when it prints `reporting/search/read scope present: YES`, set `LIVE_PAYPAL_PAYMENTS=true`.
+
+## The new sandbox app: country and partial payments
+
+- Creating a draft invoice with `configuration.partial_payment.allow_partial_payment` is refused: `400 INVALID_REQUEST`, "Partial payments are not available in your country." (debug_id f791506fd7d2e). So the business account behind this app is in India, Brazil or Israel (PayPal's API does not say which), and ClearDue's `split_invoices` strategy is the one that has to work. It does: a live seed against this app created the four demo stories, replaced the Northwind invoice with a 2-part split plan, and recorded both parts as paid.
+- The plan logic picks the strategy from the freelancer's country in ClearDue's database (the demo freelancer is `IN`), so it matches this account. A freelancer whose ClearDue country says elsewhere but whose PayPal account is in one of those three countries would get the plain-English `PARTIAL_PAYMENT_NOT_ALLOWED` message rather than a silent failure.
+- Draft invoices in USD, GBP and AUD (the demo's three currencies) are all accepted by this account.

@@ -10,7 +10,7 @@ import ProgressMetricCard from "@/components/ui/progress-metric-card";
 import { dueAheadSeries, netChange, openCountSeries, overdueCountSeries } from "@/lib/dashboard-series";
 import { describeProposal, REASON_LABELS } from "@/lib/proposals";
 import { daysOverdue, isOpen, outstanding, sumByCurrency } from "@/lib/receivables";
-import { paymentsReceived } from "@/paypal/transactions";
+import { livePaymentsEnabled, paymentsReceived } from "@/paypal/transactions";
 import { retryPendingPlans } from "@/plans/accept";
 import { PaymentsReceived } from "./payments-received";
 import { ReceivablesGrid, type ReceivableRow } from "./receivables-grid";
@@ -29,7 +29,7 @@ export default async function DashboardPage() {
       include: { client: true, planGroup: true, case: { include: { actions: { where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 1 } } }, tasks: { where: { done: false }, take: 1 } },
       orderBy: { dueDate: "asc" },
     }),
-    paymentsReceived(), // never throws; a failure becomes a notice on the card
+    livePaymentsEnabled() ? paymentsReceived() : null, // never throws; a failure becomes a notice on the card
   ]);
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
@@ -165,7 +165,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <PaymentsReceived result={payments} ourNumbers={new Set(invoices.flatMap((i) => (i.invoiceNumber ? [i.invoiceNumber] : [])))} />
+      {payments && <PaymentsReceived result={payments} ourNumbers={new Set(invoices.flatMap((i) => (i.invoiceNumber ? [i.invoiceNumber] : [])))} />}
     </div>
   );
 }

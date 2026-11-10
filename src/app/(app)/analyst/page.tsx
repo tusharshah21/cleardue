@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { clientsFor, decisionsFor, invoicesFor, plansFor, receivablesFor } from "@/agent/analyst";
 import { agLicence } from "@/lib/ag-licence";
 import { requireFreelancer } from "@/lib/auth";
-import { paymentsReceived } from "@/paypal/transactions";
+import { livePaymentsEnabled, paymentsReceived } from "@/paypal/transactions";
 import { AnalystStudio } from "./analyst-studio";
 
 export const metadata: Metadata = { title: "Analyst" };
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // signed-in users, and is never logged or put in a NEXT_PUBLIC variable (which would ship it in every bundle).
 export default async function AnalystPage() {
   const freelancer = await requireFreelancer();
-  const [clients, invoices, receivables, decisions, plans, payments] = await Promise.all([clientsFor(freelancer.id), invoicesFor(freelancer.id), receivablesFor(freelancer.id), decisionsFor(freelancer.id), plansFor(freelancer.id), paymentsReceived()]);
+  const [clients, invoices, receivables, decisions, plans, payments] = await Promise.all([clientsFor(freelancer.id), invoicesFor(freelancer.id), receivablesFor(freelancer.id), decisionsFor(freelancer.id), plansFor(freelancer.id), livePaymentsEnabled() ? paymentsReceived() : null]);
   const licence = agLicence(process.env.AG_STUDIO);
   return (
     <div className="space-y-3" data-tour="analyst">
@@ -27,12 +27,12 @@ export default async function AnalystPage() {
           <strong>{licence.state === "missing" ? "The AG Studio licence key is not set." : `The AG Studio licence key expired on ${licence.expiry}.`}</strong> The report and the AI panel still work, with AG&apos;s trial watermark. Set a current key in <code>AG_STUDIO</code> on the server to remove this.
         </div>
       )}
-      {!payments.ok && (
+      {payments && !payments.ok && (
         <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           <strong>Live PayPal payments aren&apos;t available.</strong> {payments.message} The rest of the report uses ClearDue&apos;s own records and is unaffected.
         </div>
       )}
-      <AnalystStudio licenseKey={process.env.AG_STUDIO || undefined} clients={clients} invoices={invoices} receivables={receivables} decisions={decisions} plans={plans} payments={payments.rows} />
+      <AnalystStudio licenseKey={process.env.AG_STUDIO || undefined} clients={clients} invoices={invoices} receivables={receivables} decisions={decisions} plans={plans} payments={payments ? payments.rows : null} />
     </div>
   );
 }
