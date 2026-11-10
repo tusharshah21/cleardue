@@ -174,7 +174,16 @@ export async function syncInvoice(invoice: Invoice, source = "sync"): Promise<In
   if (!invoice.paypalInvoiceId) return invoice;
   const fresh = await getInvoice(invoice.paypalInvoiceId);
   const updated = await db.invoice.update({ where: { id: invoice.id }, data: statusFields(fresh, invoice.currency) });
-  if (updated.status === invoice.status) return updated;
+  if (updated.status === invoice.status) {
+    // A payment already marked held before the explanation existed (or before a deploy): say why, once.
+    if (updated.status === HELD && !(await db.timelineEvent.findFirst({ where: { invoiceId: invoice.id, kind: "payment_held" } }))) {
+      const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });
+      const held = heldNote("", HELD, await heldPaymentReason(fresh));
+      if (held) await db.timelineEvent.create({ data: { invoiceId: invoice.id, caseId: kase?.id, ...held } });
+      if (kase) await supersedePending(kase.id, invoice.id, "the client's payment is held by PayPal");
+    }
+    return updated;
+  }
   const closed = CLOSED.includes(updated.status);
   if (closed) await db.task.updateMany({ where: { invoiceId: invoice.id, done: false }, data: { done: true } });
   const kase = await db.case.findUnique({ where: { invoiceId: invoice.id } });

@@ -300,3 +300,17 @@ describe("(e) a payment PayPal is holding (the buyer has paid, the money is not 
     expect(rows("webhookEvent")[0]).toMatchObject({ eventType: "PAYMENT.CAPTURE.PENDING", resourceId: PP_ID, processed: true });
   });
 });
+
+describe("(e2) a payment already marked held before the explanation existed", () => {
+  it("is explained once on the next sync, and not again", async () => {
+    seed("PAYMENT_PENDING", { pending: ["send_invoice_reminder"] });
+    h.paypal.set(PP_ID, { status: "PAYMENT_PENDING" });
+    h.holdReason = "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION";
+    await syncStale();
+    expect(timeline().filter((s) => s.startsWith("Payment received, held by PayPal"))).toHaveLength(1);
+    expect(rows("proposedAction")[0].status).toBe("superseded");
+    rows("invoice")[0].lastSyncedAt = old;
+    await syncStale();
+    expect(timeline().filter((s) => s.startsWith("Payment received, held by PayPal"))).toHaveLength(1);
+  });
+});
